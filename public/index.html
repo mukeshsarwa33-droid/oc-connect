@@ -1,0 +1,1893 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>OC Connect - Okanagan College Live Chat</title>
+  <script>
+    // Enforce HTTPS everywhere (except local test environment) for WebRTC and Microphone access
+    if (location.protocol === 'http:' && location.hostname !== 'localhost' && location.hostname !== '127.0.0.1') {
+      if (location.hostname.includes('trycloudflare.com')) {
+        location.replace('https://' + location.host + location.pathname + location.search + location.hash);
+      } else {
+        // Fallback for mobile devices accessing local IP without SSL
+        location.replace('https://bridal-trim-optimal-organize.trycloudflare.com' + location.pathname + location.search + location.hash);
+      }
+    }
+  </script>
+  <link rel="manifest" href="/manifest.json">
+  <meta name="theme-color" content="#075E54">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="OC Connect">
+  <meta name="application-name" content="OC Connect">
+  <meta name="apple-touch-fullscreen" content="yes">
+  <meta name="format-detection" content="telephone=no">
+  <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png">
+  <link rel="apple-touch-icon" sizes="180x180" href="/icons/apple-touch-icon.png">
+  <link rel="icon" type="image/png" sizes="192x192" href="/icons/icon-192.png">
+  <link rel="icon" type="image/png" sizes="512x512" href="/icons/icon-512.png">
+  <link rel="stylesheet" href="style.css">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220%22%20width=%22100%22%20height=%22100%22><circle cx=%2250%22 cy=%2250%22 r=%2248%22 fill=%22%23075E54%22/><text x=%2250%22 y=%2264%22 font-size=%2244%22 text-anchor=%22middle%22 fill=%22white%22 font-family=%22sans-serif%22 font-weight=%22bold%22>OC</text></svg>">
+</head>
+<body>
+  <!-- TOAST NOTIFICATIONS -->
+  <div id="toast-container"></div>
+
+  <!-- AUTH SCREEN -->
+  <div id="auth-screen" class="screen">
+    <div class="auth-card">
+      <div class="auth-header">
+        <div class="logo-circle">
+          <svg viewBox="0 0 24 24" width="40" height="40" fill="white">
+            <path d="M12 3L1 9l11 6 9-4.91V17h2V9L12 3zm0 15.5l-6-3.27V18c0 3.31 2.69 6 6 6s6-2.69 6-6v-2.77l-6 3.27z"/>
+          </svg>
+        </div>
+        <h1>OC Connect</h1>
+        <p class="auth-subtitle">Okanagan College Live Chat & Safety</p>
+        <div class="campus-badge-row">
+          <span class="campus-badge">📍 Kelowna (KLO)</span>
+          <span class="campus-badge">Penticton</span>
+          <span class="campus-badge">Vernon</span>
+          <span class="campus-badge">Salmon Arm</span>
+        </div>
+      </div>
+
+      <!-- Segmented Control: Log In vs Sign Up -->
+      <div class="auth-mode-segmented">
+        <button type="button" id="auth-tab-login" class="auth-segment-btn active">
+          <span>🔑 Log In</span>
+        </button>
+        <button type="button" id="auth-tab-signup" class="auth-segment-btn">
+          <span>🚀 Sign Up</span>
+        </button>
+      </div>
+
+      <!-- Step 1: Credentials Input & OTP Request Form -->
+      <form id="auth-request-form" class="auth-form">
+        <!-- Auth Method Selector: Email vs Phone+ID -->
+        <div class="auth-method-selector">
+          <button type="button" id="method-btn-email" class="method-chip active">
+            <span>✉️ Student Email</span>
+          </button>
+          <button type="button" id="method-btn-phone" class="method-chip">
+            <span>📱 Phone & Student ID</span>
+          </button>
+        </div>
+
+        <!-- Method A: Student Email -->
+        <div id="section-email-input" class="form-section">
+          <div class="form-group">
+            <label for="auth-email-input">Student Email Address</label>
+            <div class="input-wrapper">
+              <span class="input-icon">✉️</span>
+              <input type="email" id="auth-email-input" placeholder="e.g. student@myokanagan.bc.ca" autocomplete="email">
+            </div>
+            <small class="form-hint">Use your @myokanagan.bc.ca or student email</small>
+          </div>
+        </div>
+
+        <!-- Method B: Phone Number & Student ID -->
+        <div id="section-phone-input" class="form-section hidden">
+          <div class="form-group">
+            <label for="auth-phone-input">Mobile Phone Number</label>
+            <div class="input-wrapper">
+              <span class="input-icon">📱</span>
+              <input type="tel" id="auth-phone-input" placeholder="e.g. 250-555-0199" autocomplete="tel">
+            </div>
+            <small class="form-hint">Enter your 10-digit mobile number</small>
+          </div>
+
+          <div class="form-group">
+            <label for="auth-ocid-input">Okanagan College Student ID</label>
+            <div class="input-wrapper">
+              <span class="input-icon">🎓</span>
+              <input type="text" id="auth-ocid-input" placeholder="e.g. 300123456" autocomplete="username">
+            </div>
+            <small class="form-hint">Your 9-digit Okanagan College ID (starts with 300)</small>
+          </div>
+        </div>
+
+        <!-- Sign Up Specific Additional Fields (Hidden when in Login mode) -->
+        <div id="auth-signup-fields" class="form-section hidden">
+          <div class="form-group">
+            <label for="auth-fullname-input">Full Name / Display Name</label>
+            <div class="input-wrapper">
+              <span class="input-icon">👤</span>
+              <input type="text" id="auth-fullname-input" placeholder="e.g. Alex Miller" maxlength="40">
+            </div>
+          </div>
+
+          <div class="form-group">
+            <label for="auth-username-input">Choose Your Unique @Username</label>
+            <div class="input-wrapper">
+              <span class="input-icon">@</span>
+              <input type="text" id="auth-username-input" placeholder="e.g. alex_oc or alex24" maxlength="20" autocomplete="off">
+            </div>
+            <small class="form-hint">Classmates will connect with you using this handle</small>
+          </div>
+
+          <div class="form-group">
+            <label for="auth-major-input">Program / Major</label>
+            <div class="input-wrapper">
+              <span class="input-icon">📚</span>
+              <input type="text" id="auth-major-input" placeholder="e.g. CIS Year 2 • KLO or Business Admin" value="CIS Year 2 • KLO">
+            </div>
+          </div>
+        </div>
+
+        <button type="submit" id="btn-request-otp" class="btn-primary">
+          <span id="btn-request-otp-text">Send One-Time OTP Code</span>
+          <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor"><path d="M5 13h11.86l-5.43 5.43 1.42 1.42L21.14 12l-8.29-7.85-1.42 1.42L16.86 11H5v2z"/></svg>
+        </button>
+
+        <div class="auth-security-badge">
+          <div class="security-badge-icon">🛡️</div>
+          <div class="security-badge-text">
+            <strong>One-Time Verification Only</strong>
+            <span>Verified securely once. Your device stays logged in automatically with zero lag.</span>
+          </div>
+        </div>
+      </form>
+
+      <!-- Step 2: OTP Verification Form (Shown after requesting OTP) -->
+      <form id="auth-otp-form" class="auth-form hidden">
+        <div class="otp-header-info">
+          <button type="button" id="btn-back-to-request" class="btn-back-link">← Change Info</button>
+          <h3>Enter 6-Digit OTP</h3>
+          <p class="otp-sent-hint">Code sent to <strong id="otp-destination-label">your email</strong></p>
+        </div>
+
+        <div class="form-group otp-group">
+          <label for="auth-otp-code-input">Verification Code</label>
+          <div class="input-wrapper otp-wrapper">
+            <span class="input-icon">🔑</span>
+            <input type="text" id="auth-otp-code-input" class="otp-code-input" placeholder="• • • • • •" maxlength="6" pattern="[0-9]*" inputmode="numeric" autocomplete="one-time-code" required autofocus>
+          </div>
+          <small class="form-hint">Enter the 6-digit code or universal test code: <strong>123456</strong></small>
+        </div>
+
+        <!-- 1-Tap Quick Fill Chip -->
+        <div id="auth-quick-fill-chip" class="quick-fill-chip hidden" title="1-Tap Instant Code Paste">
+          <span class="quick-fill-icon">⚡</span>
+          <span>Tap to fill code:</span>
+          <strong id="quick-fill-code-val">123456</strong>
+        </div>
+
+        <div class="otp-timer-row">
+          <span id="otp-timer-display" class="otp-timer">⏱️ Expires in 05:00</span>
+          <button type="button" id="btn-resend-otp" class="btn-resend-link">Resend Code</button>
+        </div>
+
+        <button type="submit" id="btn-verify-otp" class="btn-primary">
+          <span>Verify & Enter OC Connect</span>
+          <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor"><path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/></svg>
+        </button>
+
+        <div class="privacy-note">
+          🔒 Zero PII Disclosure: Classmates only see your chosen @username and display name. Your email/phone is never shared.
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- APP VIEWPORT CONTAINER (Smooth Native iOS Navigation Stack) -->
+  <div id="app-viewport" class="screen hidden">
+    <!-- TOP DYNAMIC BANNER FOR IN-APP NOTIFICATIONS (iOS Dynamic Island Style) -->
+    <div id="inapp-notification-banner" class="inapp-banner hidden">
+      <div id="inapp-banner-avatar" class="avatar-sm inapp-banner-avatar">U</div>
+      <div class="inapp-banner-content">
+        <div class="inapp-banner-header">
+          <strong id="inapp-banner-title">Alex M.</strong>
+          <span class="inapp-banner-time">now</span>
+        </div>
+        <div id="inapp-banner-text" class="inapp-banner-text">Hey there! Are you on campus?</div>
+      </div>
+    </div>
+
+    <!-- MAIN APP SCREEN -->
+    <div id="main-screen" class="screen-view">
+    <!-- APP BAR -->
+    <header class="app-bar">
+      <div class="app-bar-content">
+        <div class="brand-info">
+          <h2>OC Connect</h2>
+          <span id="connection-status" class="status-indicator online">● Live Real-Time</span>
+        </div>
+        <div class="app-bar-actions">
+          <button id="btn-install-app" type="button" class="campus-install-pill" title="Install OC Connect on iOS & Android">
+            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" style="pointer-events: none;">
+              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+              <polyline points="7 10 12 15 17 10"/>
+              <line x1="12" y1="15" x2="12" y2="3"/>
+            </svg>
+            <span>Install</span>
+          </button>
+          <button id="btn-campus-weather" type="button" class="campus-weather-pill" title="Live Okanagan College Campus Weather">
+            <span id="weather-icon">🌤️</span>
+            <span id="weather-temp">19°C</span>
+            <span class="weather-pill-loc">KLO</span>
+          </button>
+          <button id="btn-my-qr" type="button" class="icon-btn" title="My Campus QR Code (Instant Classmate Connect)">
+            <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="#007AFF" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="pointer-events: none;">
+              <rect x="3" y="3" width="7" height="7"></rect>
+              <rect x="14" y="3" width="7" height="7"></rect>
+              <rect x="14" y="14" width="7" height="7"></rect>
+              <rect x="3" y="14" width="7" height="7"></rect>
+            </svg>
+          </button>
+          <button id="btn-share-app" type="button" class="icon-btn" title="Share App Link with Classmates">
+            <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="#007AFF" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="pointer-events: none;">
+              <path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"/>
+              <polyline points="16 6 12 2 8 6"/>
+              <line x1="12" y1="2" x2="12" y2="15"/>
+            </svg>
+          </button>
+          <div class="user-chip" id="user-chip-btn" title="My Profile & Settings" style="cursor:pointer">
+            <span id="current-user-avatar" class="avatar-sm">U</span>
+            <span id="current-user-handle">@username</span>
+          </div>
+          <button id="btn-logout" type="button" class="icon-btn btn-logout-btn" title="Log Out">
+            <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="#8E8E93" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="pointer-events: none;">
+              <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/>
+              <polyline points="16 17 21 12 16 7"/>
+              <line x1="21" y1="12" x2="9" y2="12"/>
+            </svg>
+          </button>
+        </div>
+      </div>
+
+      <!-- TABS -->
+      <nav class="tabs-bar">
+        <button class="tab-btn active" data-tab="chats">
+          <span>CHATS</span>
+          <span id="chats-badge" class="badge hidden">0</span>
+        </button>
+        <button class="tab-btn" data-tab="friends">
+          <span>FRIENDS</span>
+          <span id="friends-online-count" class="tab-subtitle">0 online</span>
+          <span id="friends-requests-tab-badge" class="badge-tab-alert hidden">0</span>
+        </button>
+        <button class="tab-btn" data-tab="channels">
+          <span>CAMPUS ROOMS</span>
+        </button>
+      </nav>
+    </header>
+
+    <!-- TAB CONTENTS -->
+    <main class="tabs-container">
+      <!-- TAB 1: CHATS -->
+      <section id="tab-chats" class="tab-content active">
+        <!-- DAILY STUDENT INSPIRATION BANNER (Quotes API) -->
+        <div id="motivation-banner" class="motivation-banner">
+          <div class="motivation-content">
+            <span class="motivation-icon">💡</span>
+            <div class="motivation-text-wrap">
+              <span id="motivation-quote" class="motivation-quote">"Live as if you were to die tomorrow. Learn as if you were to live forever."</span>
+              <span id="motivation-author" class="motivation-author">— Mahatma Gandhi</span>
+            </div>
+          </div>
+          <button id="btn-refresh-quote" class="btn-icon-subtle" title="New Study Motivation Quote">↻</button>
+        </div>
+
+        <!-- SEARCH BAR & GOOGLE MESSAGES CATEGORIES -->
+        <div class="chats-search-section">
+          <div class="search-box">
+            <span class="search-icon">🔍</span>
+            <input type="text" id="chats-search-input" placeholder="Search chats, groups, messages, @handles...">
+          </div>
+          <div class="inbox-categories-bar" id="inbox-categories-bar">
+            <button class="inbox-cat-chip active" data-inbox-cat="all">All</button>
+            <button class="inbox-cat-chip" data-inbox-cat="unread">🔴 Unread</button>
+            <button class="inbox-cat-chip" data-inbox-cat="personal">👤 Direct</button>
+            <button class="inbox-cat-chip" data-inbox-cat="groups">👥 Groups</button>
+            <button class="inbox-cat-chip" data-inbox-cat="starred">⭐ Starred</button>
+          </div>
+        </div>
+
+        <!-- QUICK CHATS & GROUPS ACTION BAR -->
+        <div class="chats-quick-actions-bar">
+          <button id="btn-open-create-group" class="btn-quick-group-pill" type="button" title="Create New Study/Project Group">
+            <span class="pill-icon">👥</span>
+            <span>New Group</span>
+          </button>
+          <button id="btn-quick-new-chat" class="btn-quick-chat-pill" type="button" title="Start Direct Chat with Classmates">
+            <span class="pill-icon">💬</span>
+            <span>New Chat</span>
+          </button>
+          <button id="btn-open-starred-inbox" class="btn-quick-starred-pill" type="button" title="View Starred Messages">
+            <span class="pill-icon">⭐</span>
+            <span>Starred</span>
+          </button>
+        </div>
+
+        <div id="chats-list" class="list-view">
+          <!-- Dynamic Chat items -->
+        </div>
+        <div id="no-chats-placeholder" class="empty-placeholder hidden">
+          <div class="empty-icon">💬</div>
+          <h3>No chats yet</h3>
+          <p>Tap below to start a chat with registered classmates or jump into Campus Rooms!</p>
+          <button id="btn-empty-add-friend" class="btn-secondary">View Campus Classmates</button>
+        </div>
+      </section>
+
+      <!-- TAB 2: FRIENDS & CAMPUS DIRECTORY -->
+      <section id="tab-friends" class="tab-content">
+        <!-- INCOMING FRIEND REQUESTS SECTION -->
+        <div id="friend-requests-container" class="friend-requests-container hidden">
+          <div class="requests-header">
+            <span class="requests-title">📬 PENDING FRIEND REQUESTS</span>
+            <span id="requests-badge" class="badge-count">0</span>
+          </div>
+          <div id="friend-requests-list" class="requests-list">
+            <!-- Dynamic request cards -->
+          </div>
+        </div>
+
+        <div class="section-actions-bar">
+          <div class="search-box">
+            <span class="search-icon">🔍</span>
+            <input type="text" id="friends-filter-input" placeholder="Search 100+ classmates, majors, handles...">
+          </div>
+          <!-- FILTER CHIPS -->
+          <div class="filter-chips" id="filter-chips-bar">
+            <button class="chip active" data-filter="all">All (100+)</button>
+            <button class="chip" data-filter="online">● Online Now</button>
+            <button class="chip" data-filter="klo">KLO Kelowna</button>
+            <button class="chip" data-filter="tech">Tech & CIS</button>
+          </div>
+        </div>
+
+        <!-- MY FRIENDS SECTION -->
+        <div class="section-divider">
+          <span>MY FRIENDS (<span id="my-friends-count">0</span>)</span>
+        </div>
+        <div id="friends-list" class="list-view">
+          <!-- Dynamic Friends items -->
+        </div>
+        <div id="no-friends-placeholder" class="empty-inline-hint hidden">
+          No friends added yet. Accept pending requests or connect with classmates in the directory below!
+        </div>
+
+        <!-- CAMPUS DIRECTORY (ALL STUDENTS) -->
+        <div class="section-divider directory-divider">
+          <span>🎓 CAMPUS DIRECTORY (<span id="total-students-count">100+</span>)</span>
+        </div>
+        <div id="campus-directory-list" class="list-view">
+          <!-- Dynamic All Students items -->
+        </div>
+      </section>
+
+      <!-- TAB 3: CAMPUS ROOMS -->
+      <section id="tab-channels" class="tab-content">
+        <div class="channels-list">
+          <div class="channel-card" data-channel="kelowna-general">
+            <div class="channel-avatar">🎓</div>
+            <div class="channel-info">
+              <div class="channel-title">
+                <h4>#Kelowna-General</h4>
+                <span class="channel-tag">All Students</span>
+              </div>
+              <p>Campus-wide discussion, meet classmates, events</p>
+            </div>
+            <button class="btn-join">Open</button>
+          </div>
+
+          <div class="channel-card" data-channel="study-lounge">
+            <div class="channel-avatar">📚</div>
+            <div class="channel-info">
+              <div class="channel-title">
+                <h4>#Study-Lounge</h4>
+                <span class="channel-tag">KLO Library</span>
+              </div>
+              <p>Study groups, exam prep, textbook exchanges</p>
+            </div>
+            <button class="btn-join">Open</button>
+          </div>
+
+          <div class="channel-card" data-channel="campus-safety">
+            <div class="channel-avatar">🛡️</div>
+            <div class="channel-info">
+              <div class="channel-title">
+                <h4>#Campus-Safety</h4>
+                <span class="channel-tag">24/7 Security</span>
+              </div>
+              <p>Safety alerts, Walk Me Home requests, security hotline</p>
+            </div>
+            <button class="btn-join">Open</button>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <!-- FLOATING ACTIONS -->
+    <div class="floating-container">
+      <button id="fab-sos" class="btn-fab-sos" title="Campus Safety / Walk Me Home">
+        <span class="fab-sos-icon">🚨</span>
+        <span class="fab-sos-text">SOS / WALK ME HOME</span>
+      </button>
+      <button id="fab-add-friend" class="btn-fab-add" title="Find Classmates">
+        <svg viewBox="0 0 24 24" width="26" height="26" fill="white">
+          <path d="M15 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm-9-2V7H4v3H1v2h3v3h2v-3h3v-2H6zm9 4c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/>
+        </svg>
+      </button>
+    </div>
+  </div>
+
+  <!-- 1-ON-1 / CHANNEL CHAT SCREEN VIEW -->
+  <div id="chat-screen" class="screen-view chat-view">
+    <!-- CHAT HEADER -->
+    <header class="chat-header">
+      <button id="btn-back-to-home" class="btn-back-ios" title="Back">
+        <svg viewBox="0 0 24 24" width="22" height="22" fill="#007AFF">
+          <path d="M15.41 7.41L14 6l-6 6 6 6 1.41-1.41L10.83 12z"/>
+        </svg>
+        <span class="back-text">Back</span>
+      </button>
+      <div class="chat-header-center" id="chat-header-partner-click" title="View Profile, Verification & Shared Media" style="cursor: pointer;">
+        <div id="chat-partner-avatar" class="avatar-circle">A</div>
+        <div class="chat-header-info">
+          <div class="partner-name-wrapper">
+            <h3 id="chat-partner-title">Alex M.</h3>
+            <span id="partner-blue-tick" class="header-blue-tick hidden" title="Verified Trusted Classmate">
+              <svg class="twitter-blue-tick" viewBox="0 0 22 22" width="16" height="16">
+                <path fill="#1D9BF0" d="M20.396 11c-.018-.646-.215-1.275-.57-1.816-.354-.54-.852-.972-1.438-1.246.223-.607.27-1.264.14-1.897-.131-.634-.437-1.218-.882-1.687-.47-.445-1.053-.75-1.687-.882-.633-.13-1.29-.083-1.897.14-.273-.587-.704-1.086-1.245-1.44S11.647 1.62 11 1.604c-.646.017-1.273.213-1.813.568s-.969.854-1.24 1.44c-.608-.223-1.267-.272-1.902-.14-.635.13-1.22.436-1.69.882-.445.47-.749 1.055-.878 1.688-.13.633-.08 1.29.144 1.896-.587.274-1.087.705-1.443 1.246-.356.54-.555 1.17-.574 1.817.02.647.218 1.276.574 1.817.356.54.856.972 1.443 1.245-.224.606-.274 1.263-.144 1.896.13.634.433 1.218.877 1.688.47.443 1.054.747 1.687.878.633.132 1.29.084 1.897-.136.274.586.705 1.084 1.246 1.439.54.354 1.17.551 1.816.569.647-.016 1.276-.213 1.817-.567s.972-.854 1.245-1.44c.604.239 1.266.296 1.903.164.636-.132 1.22-.447 1.68-.907.46-.46.776-1.044.908-1.681s.075-1.299-.165-1.903c.586-.274 1.084-.705 1.439-1.246.354-.54.551-1.17.569-1.816zM9.662 14.85l-3.429-3.428 1.293-1.302 2.136 2.136 5.864-5.864 1.293 1.302-7.157 7.156z"/>
+              </svg>
+            </span>
+          </div>
+          <span id="chat-partner-subtitle" class="partner-subtitle">online</span>
+        </div>
+      </div>
+      <div class="chat-header-actions">
+        <button id="btn-chat-starred" type="button" class="icon-btn-ios" title="Starred Messages in this chat">
+          <svg viewBox="0 0 24 24" width="20" height="20" fill="#FF9500" style="pointer-events: none;">
+            <path d="M12 17.27L18.18 21l-1.64-7.03L22 9.24l-7.19-.61L12 2 9.19 8.63 2 9.24l5.46 4.73L5.82 21z"/>
+          </svg>
+        </button>
+        <button id="btn-start-call" type="button" class="icon-btn-ios" title="Voice Call">
+          <svg viewBox="0 0 24 24" width="20" height="20" fill="#007AFF" style="pointer-events: none;">
+            <path d="M6.62 10.79c1.44 2.83 3.76 5.14 6.59 6.59l2.2-2.2c.27-.27.67-.36 1.02-.24 1.12.37 2.33.57 3.57.57.55 0 1 .45 1 1V20c0 .55-.45 1-1 1-9.39 0-17-7.61-17-17 0-.55.45-1 1-1h3.5c.55 0 1 .45 1 1 0 1.25.2 2.45.57 3.57.11.35.03.74-.25 1.02l-2.2 2.2z"/>
+          </svg>
+        </button>
+        <button id="btn-call-security" type="button" class="icon-btn-ios" title="Campus Safety">
+          <svg viewBox="0 0 24 24" width="20" height="20" fill="#8E8E93" style="pointer-events: none;">
+            <path d="M12 1L3 5v6c0 5.55 3.84 10.74 9 12 5.16-1.26 9-6.45 9-12V5l-9-4zm0 10.99h7c-.53 4.12-3.28 7.79-7 8.94V12H5V6.3l7-3.11v8.8z"/>
+          </svg>
+        </button>
+      </div>
+    </header>
+
+    <!-- MESSAGES LIST AREA -->
+    <div id="messages-container" class="messages-area">
+      <!-- Dynamic Messages -->
+    </div>
+
+    <!-- PENDING SCHEDULED MESSAGES BANNER -->
+    <div id="scheduled-messages-banner" class="scheduled-banner hidden">
+      <div class="scheduled-banner-content">
+        <span class="scheduled-banner-icon">⏰</span>
+        <span id="scheduled-banner-text">1 scheduled message</span>
+      </div>
+      <button id="btn-view-scheduled-messages" type="button" class="btn-scheduled-view">View</button>
+    </div>
+
+    <!-- GOOGLE MESSAGES: AI SMART REPLIES BAR -->
+    <div id="smart-replies-bar" class="smart-replies-bar hidden">
+      <div id="smart-replies-chips" class="smart-replies-track">
+        <!-- Dynamic Smart Reply Pills -->
+      </div>
+    </div>
+
+    <!-- GOOGLE MESSAGES & RCS: DOCKED QUOTED REPLY PREVIEW BAR -->
+    <div id="reply-preview-bar" class="reply-preview-bar hidden">
+      <div class="reply-preview-indicator"></div>
+      <div class="reply-preview-text-block">
+        <div class="reply-preview-sender-row">
+          <span class="reply-preview-icon">↩️</span>
+          <span class="reply-preview-sender" id="reply-preview-sender">Replying to Alex M.</span>
+        </div>
+        <div class="reply-preview-snippet" id="reply-preview-snippet">Original message content here...</div>
+      </div>
+      <button id="btn-cancel-reply" type="button" class="btn-cancel-reply" title="Dismiss Reply (Esc)">
+        <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor">
+          <path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/>
+        </svg>
+      </button>
+    </div>
+
+    <!-- CHAT INPUT BAR -->
+    <footer class="chat-input-bar">
+      <!-- Universal File Attachment Button -->
+      <button id="btn-attach-file" type="button" class="btn-ios-plus" title="Share Photos, Videos, Documents, Books, Any File">
+        <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="#007AFF" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="pointer-events: none;">
+          <line x1="12" y1="5" x2="12" y2="19"></line>
+          <line x1="5" y1="12" x2="19" y2="12"></line>
+        </svg>
+      </button>
+      <input type="file" id="universal-file-input" style="display: none;" multiple accept="image/*,video/*,audio/*,.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.zip,.rar,.7z,.tar,.gz,.csv,.epub,.json,.js,.py,.cpp,.c,.html,.css,application/*,text/*">
+
+      <!-- Magic Compose AI Button (Google Messages Style) -->
+      <button id="btn-magic-compose" type="button" class="btn-ios-magic" title="Magic Compose AI: Academic, Concise, Excited, Chill tones">
+        <svg viewBox="0 0 24 24" width="20" height="20" fill="#AF52DE" style="pointer-events: none;">
+          <path d="M7.5 5.6L10 7 8.6 4.5 10 2 7.5 3.4 5 2l1.4 2.5L5 7zm12 9.8L17 14l1.4 2.5L17 19l2.5-1.4L22 19l-1.4-2.5L22 14zM14.37 7.29l-9.5 9.5a1 1 0 0 0 0 1.42l1.42 1.42a1 1 0 0 0 1.42 0l9.5-9.5a1 1 0 0 0 0-1.42l-1.42-1.42a1 1 0 0 0-1.42 0zm-1.06 3.18l-.71-.71 1.42-1.42.71.71-1.42 1.42z"/>
+        </svg>
+      </button>
+
+      <!-- Academic & Study Tools Button -->
+      <button id="btn-study-tools" type="button" class="btn-ios-study" title="Study Tools: Wikipedia, Books, Jokes, Campus Weather">
+        <svg viewBox="0 0 24 24" width="20" height="20" fill="#34C759" style="pointer-events: none;">
+          <path d="M12 3L1 9l4 2.18v6L12 21l7-3.82v-6l2-1.09V17h2V9L12 3zm6.82 6L12 12.72 5.18 9 12 5.28 18.82 9zM17 15.99l-5 2.73-5-2.73v-3.72L12 15l5-2.73v3.72z"/>
+        </svg>
+      </button>
+
+      <!-- Text Input Box -->
+      <div class="message-input-box" id="message-input-box">
+        <textarea id="message-text-input" placeholder="Message..." rows="1"></textarea>
+      </div>
+
+      <!-- Live Voice Recording Bar (shown during recording) -->
+      <div id="voice-recording-bar" class="voice-recording-bar hidden">
+        <div class="recording-indicator">
+          <span class="pulsing-record-dot"></span>
+          <span id="recording-timer">00:00</span>
+        </div>
+        <div class="audio-waves">
+          <span></span><span></span><span></span><span></span><span></span>
+        </div>
+        <button id="btn-cancel-recording" type="button" class="btn-cancel-record" title="Cancel Recording">
+          <svg viewBox="0 0 24 24" width="18" height="18" fill="#FF3B30" style="pointer-events: none;">
+            <path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/>
+          </svg>
+        </button>
+        <button id="btn-send-recording" type="button" class="btn-send-record" title="Send Voice Message">
+          <svg viewBox="0 0 24 24" width="18" height="18" fill="white" style="pointer-events: none;">
+            <path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/>
+          </svg>
+        </button>
+      </div>
+
+      <!-- Voice Record Mic Button -->
+      <button id="btn-voice-record" type="button" class="btn-ios-mic" title="Record Voice Message">
+        <svg viewBox="0 0 24 24" width="20" height="20" fill="#007AFF" style="pointer-events: none;">
+          <path d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3zm5.91-3c-.49 0-.9.36-.98.85C16.52 14.2 14.47 16 12 16s-4.52-1.8-4.93-4.15c-.08-.49-.49-.85-.98-.85-.61 0-1.09.54-1 1.14.49 3 2.89 5.35 5.91 5.78V20H9c-.55 0-1 .45-1 1s.45 1 1 1h6c.55 0 1-.45 1-1s-.45-1-1-1h-2v-2.08c3.02-.43 5.42-2.78 5.91-5.78.1-.6-.39-1.14-1-1.14z"/>
+        </svg>
+      </button>
+
+      <!-- Send Text Button (Tap to send, Long-press to schedule) -->
+      <button id="btn-send-message" type="button" class="btn-send-ios" title="Send Message (Hold to Schedule)">
+        <svg viewBox="0 0 24 24" width="16" height="16" fill="white" style="pointer-events: none;">
+          <path d="M12 4l-7 7h4v9h6v-9h4l-7-7z"/>
+        </svg>
+      </button>
+    </footer>
+
+    <!-- CUPERTINO ATTACHMENT ACTION SHEET (Animated Pop-up Grid) -->
+    <div id="attachment-sheet-backdrop" class="attachment-sheet-backdrop hidden">
+      <div id="attachment-sheet-menu" class="attachment-sheet-menu">
+        <div class="ios-sheet-handle"></div>
+        <div class="attachment-sheet-title">Share with Classmate</div>
+        <div class="attachment-grid">
+          <button type="button" class="attachment-item" id="attach-opt-photos">
+            <div class="attach-icon-circle bg-blue">
+              <svg viewBox="0 0 24 24" width="22" height="22" fill="white"><path d="M21 19V5c0-1.1-.9-2-2-2H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2zM8.5 13.5l2.5 3.01L14.5 12l4.5 6H5l3.5-4.5z"/></svg>
+            </div>
+            <span>Photos & Videos</span>
+          </button>
+          <button type="button" class="attachment-item" id="attach-opt-docs">
+            <div class="attach-icon-circle bg-purple">
+              <svg viewBox="0 0 24 24" width="22" height="22" fill="white"><path d="M14 2H6c-1.1 0-1.99.9-1.99 2L4 20c0 1.1.89 2 1.99 2H18c1.1 0 2-.9 2-2V8l-6-6zm2 16H8v-2h8v2zm0-4H8v-2h8v2zm-3-5V3.5L18.5 9H13z"/></svg>
+            </div>
+            <span>Files & Books</span>
+          </button>
+          <button type="button" class="attachment-item" id="attach-opt-schedule">
+            <div class="attach-icon-circle bg-amber">
+              <svg viewBox="0 0 24 24" width="22" height="22" fill="white"><path d="M11.99 2C6.47 2 2 6.48 2 12s4.47 10 9.99 10C17.52 22 22 17.52 22 12S17.52 2 11.99 2zM12 20c-4.42 0-8-3.58-8-8s3.58-8 8-8 8 3.58 8 8-3.58 8-8 8zm.5-13H11v6l5.25 3.15.75-1.23-4.5-2.67z"/></svg>
+            </div>
+            <span>Schedule Send</span>
+          </button>
+          <button type="button" class="attachment-item" id="attach-opt-magic-compose">
+            <div class="attach-icon-circle bg-violet">
+              <svg viewBox="0 0 24 24" width="22" height="22" fill="white"><path d="M7.5 5.6L10 7 8.6 4.5 10 2 7.5 3.4 5 2l1.4 2.5L5 7zm12 9.8L17 14l1.4 2.5L17 19l2.5-1.4L22 19l-1.4-2.5L22 14zM14.37 7.29l-9.5 9.5a1 1 0 0 0 0 1.42l1.42 1.42a1 1 0 0 0 1.42 0l9.5-9.5a1 1 0 0 0 0-1.42l-1.42-1.42a1 1 0 0 0-1.42 0z"/></svg>
+            </div>
+            <span>Magic Compose</span>
+          </button>
+          <button type="button" class="attachment-item" id="attach-opt-location">
+            <div class="attach-icon-circle bg-orange">
+              <svg viewBox="0 0 24 24" width="22" height="22" fill="white"><path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z"/></svg>
+            </div>
+            <span>Meeting Pin</span>
+          </button>
+          <button type="button" class="attachment-item" id="attach-opt-define">
+            <div class="attach-icon-circle bg-indigo">
+              <svg viewBox="0 0 24 24" width="22" height="22" fill="white"><path d="M4 6H2v14c0 1.1.9 2 2 2h14v-2H4V6zm16-4H8c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zm-1 9H9V9h10v2zm-4 4H9v-2h6v2zm4-8H9V5h10v2z"/></svg>
+            </div>
+            <span>Dictionary</span>
+          </button>
+          <button type="button" class="attachment-item" id="attach-opt-convert">
+            <div class="attach-icon-circle bg-pink">
+              <svg viewBox="0 0 24 24" width="22" height="22" fill="white"><path d="M12.89 11.1c-1.78-.59-2.64-.96-2.64-1.9 0-1.02 1.11-1.39 1.81-1.39 1.31 0 1.86.59 1.91 1.48h2.09c-.06-1.58-.96-2.92-2.81-3.37V4h-3v1.9c-1.85.44-3.1 1.76-3.1 3.25 0 2.29 1.93 2.98 3.73 3.4 1.78.43 2.68 1.05 2.68 2.05 0 1.03-1.04 1.5-2.14 1.5-1.47 0-2.19-.7-2.31-1.7h-2.13c.12 1.95 1.46 3.09 3.44 3.52V20h3v-1.9c1.92-.42 3.16-1.75 3.16-3.32 0-2.37-1.95-3.04-3.69-3.68z"/></svg>
+            </div>
+            <span>Currency</span>
+          </button>
+          <button type="button" class="attachment-item" id="attach-opt-advice">
+            <div class="attach-icon-circle bg-teal">
+              <svg viewBox="0 0 24 24" width="22" height="22" fill="white"><path d="M9 21c0 .55.45 1 1 1h4c.55 0 1-.45 1-1v-1H9v1zm3-19C8.14 2 5 5.14 5 9c0 2.38 1.19 4.47 3 5.74V17c0 .55.45 1 1 1h6c.55 0 1-.45 1-1v-2.26c1.81-1.27 3-3.36 3-5.74 0-3.86-3.14-7-7-7z"/></svg>
+            </div>
+            <span>Study Advice</span>
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- FLOATING TAPBACK REACTION POPOVER (iOS 17 & Google Messages Floating Glass) -->
+    <div id="reaction-popover" class="reaction-popover hidden" role="toolbar" aria-label="Message Reactions and Actions">
+      <div class="reaction-emojis-row">
+        <button type="button" class="reaction-emoji-btn" data-reaction="❤️" title="Love">❤️</button>
+        <button type="button" class="reaction-emoji-btn" data-reaction="👍" title="Thumbs Up">👍</button>
+        <button type="button" class="reaction-emoji-btn" data-reaction="🔥" title="Fire">🔥</button>
+        <button type="button" class="reaction-emoji-btn" data-reaction="😂" title="Laugh">😂</button>
+        <button type="button" class="reaction-emoji-btn" data-reaction="😮" title="Surprised">😮</button>
+        <button type="button" class="reaction-emoji-btn" data-reaction="🙏" title="Thanks/Pray">🙏</button>
+        <button type="button" class="reaction-emoji-btn" data-reaction="🎓" title="Campus Study">🎓</button>
+      </div>
+      <div class="reaction-actions-divider"></div>
+      <div class="reaction-actions-row">
+        <button type="button" class="reaction-action-btn" id="popover-btn-reply" title="Quote & Reply">
+          <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor"><path d="M10 9V5l-7 7 7 7v-4.1c5 0 8.5 1.6 11 5.1-1-5-4-10-11-11z"/></svg>
+          <span>Reply</span>
+        </button>
+        <button type="button" class="reaction-action-btn" id="popover-btn-star" title="Star Message">
+          <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor"><path d="M12 17.27L18.18 21l-1.64-7.03L22 9.24l-7.19-.61L12 2 9.19 8.63 2 9.24l5.46 4.73L5.82 21z"/></svg>
+          <span>Star</span>
+        </button>
+        <button type="button" class="reaction-action-btn" id="popover-btn-copy" title="Copy Text">
+          <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor"><path d="M16 1H4c-1.1 0-2 .9-2 2v14h2V3h12V1zm3 4H8c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h11c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2zm0 16H8V7h11v14z"/></svg>
+          <span>Copy</span>
+        </button>
+      </div>
+    </div>
+    </div>
+  </div>
+
+  <!-- ADD / SEARCH CLASSMATE MODAL -->
+  <div id="modal-add-friend" class="modal-backdrop hidden">
+    <div class="modal-card">
+      <div class="ios-sheet-handle"></div>
+      <div class="modal-header">
+        <h3>Connect with Classmates</h3>
+        <button id="btn-close-add-modal" class="btn-close-ios">&times;</button>
+      </div>
+      <div class="modal-body">
+        <p class="modal-instruction">🔒 <strong>Student Privacy Protected</strong>: Enter a classmate's exact @username to find and connect.</p>
+        <div class="input-wrapper">
+          <span class="input-icon">@</span>
+          <input type="text" id="add-friend-input" placeholder="Enter classmate's exact @username..." autocomplete="off">
+        </div>
+        <div id="search-results-list" class="search-results">
+          <!-- Pre-populated directory -->
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button id="btn-submit-add-friend" class="btn-primary">Connect</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- SOS / WALK ME HOME MODAL -->
+  <div id="modal-sos" class="modal-backdrop hidden">
+    <div class="modal-card modal-sos-card">
+      <div class="ios-sheet-handle"></div>
+      <div class="modal-header emergency-header">
+        <div class="emergency-icon-ring">🚨</div>
+        <h3>Campus Safety & Emergency</h3>
+        <button id="btn-close-sos-modal" class="btn-close-ios">&times;</button>
+      </div>
+      <div class="modal-body">
+        <div class="safety-options">
+          <div class="safety-card highlight-danger">
+            <h4>🔴 Emergency Campus Alert</h4>
+            <p>Broadcasts an instant SOS beacon to all your friends and Campus Security.</p>
+            <button id="btn-trigger-sos" class="btn-danger">
+              BROADCAST SOS ALERT
+            </button>
+          </div>
+
+          <div class="safety-card">
+            <h4>🚶‍♀️ Walk Me Home Buddy</h4>
+            <p>Heading to your car or bus loop after dark? Let your friends track your safe arrival.</p>
+            <button id="btn-walk-me-home" class="btn-secondary">
+              Start Walk Me Home (15 min)
+            </button>
+          </div>
+
+          <div class="security-contact-box">
+            <div class="contact-header">
+              <span class="shield-icon">🛡️</span>
+              <div>
+                <strong>OC Kelowna Campus Security</strong>
+                <p>24/7 Dispatch: <strong>250-762-5445 ext 4676</strong></p>
+              </div>
+            </div>
+            <a href="tel:2507625445,4676" class="btn-call-direct">
+              📞 Direct Call Security (Free)
+            </a>
+            <a href="tel:911" class="btn-call-911">
+              🚨 Call 911 Emergency
+            </a>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- SHARE APP MODAL -->
+  <div id="modal-share" class="modal-backdrop hidden">
+    <div class="modal-card">
+      <div class="ios-sheet-handle"></div>
+      <div class="modal-header">
+        <h3>Share OC Connect</h3>
+        <button id="btn-close-share-modal" class="btn-close-ios">&times;</button>
+      </div>
+      <div class="modal-body">
+        <p>Send this link to your classmates so they can join and chat with you in real time:</p>
+        <div class="share-link-box">
+          <input type="text" id="share-link-input" readonly value="">
+          <button id="btn-copy-share-link" class="btn-copy">Copy Link</button>
+        </div>
+        <div class="share-instructions">
+          <p>✔️ Works on <strong>any device</strong> (iPhone Safari, Android Chrome, Mac, Windows, iPads).</p>
+          <p>✔️ Enter using OC Student ID and code <strong>123456</strong>.</p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- INCOMING VOICE CALL MODAL (CONSENT-BASED: ACCEPT / DECLINE) -->
+  <div id="modal-incoming-call" class="modal-backdrop hidden">
+    <div class="call-sheet-card incoming-call-card">
+      <div class="call-avatar-wrapper">
+        <div id="caller-avatar" class="avatar-circle call-avatar">U</div>
+      </div>
+      <h3 id="caller-name">Classmate</h3>
+      <p class="call-subtitle">Incoming Voice Call</p>
+      <div class="call-actions-row">
+        <button id="btn-decline-call" class="btn-call-circle decline" title="Decline Call">
+          <svg viewBox="0 0 24 24" width="28" height="28" fill="white">
+            <path d="M12 9c-1.6 0-3.15.25-4.6.72v3.1c0 .39-.23.74-.56.9-.98.49-1.87 1.12-2.66 1.85-.18.18-.43.28-.7.28-.28 0-.53-.11-.71-.29L.29 13.08a.99.99 0 0 1 0-1.41C2.79 9.17 6.13 7.5 12 7.5s9.21 1.67 11.71 4.17c.39.39.39 1.02 0 1.41l-2.48 2.48c-.18.18-.43.29-.71.29-.27 0-.52-.1-.7-.28-.79-.74-1.69-1.36-2.67-1.85-.33-.16-.56-.5-.56-.9v-3.1C15.15 9.25 13.6 9 12 9z"/>
+          </svg>
+          <span class="call-btn-label">Decline</span>
+        </button>
+        <button id="btn-accept-call" class="btn-call-circle accept" title="Accept Call">
+          <svg viewBox="0 0 24 24" width="28" height="28" fill="white">
+            <path d="M6.62 10.79c1.44 2.83 3.76 5.14 6.59 6.59l2.2-2.2c.27-.27.67-.36 1.02-.24 1.12.37 2.33.57 3.57.57.55 0 1 .45 1 1V20c0 .55-.45 1-1 1-9.39 0-17-7.61-17-17 0-.55.45-1 1-1h3.5c.55 0 1 .45 1 1 0 1.25.2 2.45.57 3.57.11.35.03.74-.25 1.02l-2.2 2.2z"/>
+          </svg>
+          <span class="call-btn-label">Accept</span>
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ACTIVE / OUTGOING VOICE CALL MODAL -->
+  <div id="modal-active-call" class="modal-backdrop hidden">
+    <div class="call-sheet-card active-call-card">
+      <div id="active-call-avatar" class="avatar-circle call-avatar">U</div>
+      <h3 id="active-call-name">Classmate</h3>
+      <p id="active-call-status" class="call-subtitle">Calling...</p>
+      <div id="active-call-timer" class="call-timer hidden">00:00</div>
+      <div class="active-call-controls">
+        <button id="btn-toggle-mute" class="btn-call-control" title="Mute Microphone">
+          <svg viewBox="0 0 24 24" width="24" height="24" fill="white">
+            <path d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3zm5.91-3c-.49 0-.9.36-.98.85C16.52 14.2 14.47 16 12 16s-4.52-1.8-4.93-4.15c-.08-.49-.49-.85-.98-.85-.61 0-1.09.54-1 1.14.49 3 2.89 5.35 5.91 5.78V20H9c-.55 0-1 .45-1 1s.45 1 1 1h6c.55 0 1-.45 1-1s-.45-1-1-1h-2v-2.08c3.02-.43 5.42-2.78 5.91-5.78.1-.6-.39-1.14-1-1.14z"/>
+          </svg>
+          <span id="mute-label">Mute</span>
+        </button>
+        <button id="btn-end-call" class="btn-call-circle decline" title="End Call">
+          <svg viewBox="0 0 24 24" width="28" height="28" fill="white">
+            <path d="M12 9c-1.6 0-3.15.25-4.6.72v3.1c0 .39-.23.74-.56.9-.98.49-1.87 1.12-2.66 1.85-.18.18-.43.28-.7.28-.28 0-.53-.11-.71-.29L.29 13.08a.99.99 0 0 1 0-1.41C2.79 9.17 6.13 7.5 12 7.5s9.21 1.67 11.71 4.17c.39.39.39 1.02 0 1.41l-2.48 2.48c-.18.18-.43.29-.71.29-.27 0-.52-.1-.7-.28-.79-.74-1.69-1.36-2.67-1.85-.33-.16-.56-.5-.56-.9v-3.1C15.15 9.25 13.6 9 12 9z"/>
+          </svg>
+          <span class="call-btn-label">End</span>
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- REMOTE AUDIO STREAM FOR LIVE WEBRTC CALLS -->
+  <audio id="remote-call-audio" autoplay playsinline style="position: fixed; bottom: 0; left: 0; width: 1px; height: 1px; opacity: 0.01; pointer-events: none;"></audio>
+
+  <!-- WHATSAPP-STYLE CONTACT PROFILE & SHARED MEDIA DRAWER -->
+  <div id="modal-contact-profile" class="modal-backdrop hidden">
+    <div class="modal-card profile-modal-card">
+      <div class="ios-sheet-handle"></div>
+      <div class="modal-header">
+        <button id="btn-close-profile-modal" class="btn-back-ios">
+          <svg viewBox="0 0 24 24" width="20" height="20" fill="#007AFF"><path d="M15.41 7.41L14 6l-6 6 6 6 1.41-1.41L10.83 12z"/></svg>
+          <span class="back-text">Done</span>
+        </button>
+        <h3>Contact Info</h3>
+        <div style="width:40px"></div>
+      </div>
+      <div class="modal-body profile-modal-body">
+        <!-- Main Profile Hero Card -->
+        <div class="profile-hero-card">
+          <div id="profile-modal-avatar" class="avatar-circle profile-avatar-lg">A</div>
+          <div class="profile-hero-details">
+            <div class="profile-hero-name-row">
+              <h2 id="profile-modal-name">Alex Martinez</h2>
+              <span id="profile-modal-badge" class="profile-blue-tick hidden">
+                <svg class="twitter-blue-tick" viewBox="0 0 22 22" width="20" height="20">
+                  <path fill="#1D9BF0" d="M20.396 11c-.018-.646-.215-1.275-.57-1.816-.354-.54-.852-.972-1.438-1.246.223-.607.27-1.264.14-1.897-.131-.634-.437-1.218-.882-1.687-.47-.445-1.053-.75-1.687-.882-.633-.13-1.29-.083-1.897.14-.273-.587-.704-1.086-1.245-1.44S11.647 1.62 11 1.604c-.646.017-1.273.213-1.813.568s-.969.854-1.24 1.44c-.608-.223-1.267-.272-1.902-.14-.635.13-1.22.436-1.69.882-.445.47-.749 1.055-.878 1.688-.13.633-.08 1.29.144 1.896-.587.274-1.087.705-1.443 1.246-.356.54-.555 1.17-.574 1.817.02.647.218 1.276.574 1.817.356.54.856.972 1.443 1.245-.224.606-.274 1.263-.144 1.896.13.634.433 1.218.877 1.688.47.443 1.054.747 1.687.878.633.132 1.29.084 1.897-.136.274.586.705 1.084 1.246 1.439.54.354 1.17.551 1.816.569.647-.016 1.276-.213 1.817-.567s.972-.854 1.245-1.44c.604.239 1.266.296 1.903.164.636-.132 1.22-.447 1.68-.907.46-.46.776-1.044.908-1.681s.075-1.299-.165-1.903c.586-.274 1.084-.705 1.439-1.246.354-.54.551-1.17.569-1.816zM9.662 14.85l-3.429-3.428 1.293-1.302 2.136 2.136 5.864-5.864 1.293 1.302-7.157 7.156z"/>
+                </svg>
+              </span>
+            </div>
+            <p id="profile-modal-handle" class="profile-handle">@alex_oc</p>
+            <div id="profile-modal-status" class="profile-online-status">● Online now</div>
+          </div>
+        </div>
+
+        <!-- Action Buttons Row -->
+        <div class="profile-actions-bar">
+          <button id="profile-btn-message" class="profile-action-btn">
+            <span class="action-icon">💬</span>
+            <span class="action-label">Message</span>
+          </button>
+          <button id="profile-btn-call" class="profile-action-btn">
+            <span class="action-icon">📞</span>
+            <span class="action-label">Voice Call</span>
+          </button>
+          <button id="profile-btn-toggle-trust" class="profile-action-btn">
+            <span class="action-icon">✓</span>
+            <span id="profile-trust-label" class="action-label">Verify Trust</span>
+          </button>
+        </div>
+
+        <!-- Academic & Campus Info Card -->
+        <div class="profile-info-section">
+          <h4>Academic & Campus Details</h4>
+          <div class="profile-info-row">
+            <span class="info-label">🎓 Program / Major:</span>
+            <span id="profile-modal-major" class="info-val">Computer Information Systems</span>
+          </div>
+          <div class="profile-info-row">
+            <span class="info-label">📍 Campus:</span>
+            <span id="profile-modal-campus" class="info-val">Kelowna Campus (KLO)</span>
+          </div>
+          <div class="profile-info-row">
+            <span class="info-label">🛡️ Verification:</span>
+            <span id="profile-modal-trust-status" class="info-val">Verified Okanagan College Student</span>
+          </div>
+        </div>
+
+        <!-- Shared Media & Documents Section (WhatsApp Style) -->
+        <div class="profile-shared-media-section">
+          <div class="shared-media-header">
+            <h4>Shared Media & Files</h4>
+            <span id="profile-media-count-badge" class="media-count-pill">0</span>
+          </div>
+
+          <!-- Segmented Filter Tabs -->
+          <div class="media-tabs-bar">
+            <button class="media-tab-btn active" data-media-tab="photos">Photos & Videos</button>
+            <button class="media-tab-btn" data-media-tab="docs">Documents & Files</button>
+          </div>
+
+          <!-- Photos & Videos Grid -->
+          <div id="profile-shared-media-grid" class="shared-media-grid">
+            <!-- Dynamic thumbnails -->
+          </div>
+
+          <!-- Documents List -->
+          <div id="profile-shared-files-list" class="shared-files-list hidden">
+            <!-- Dynamic document rows -->
+          </div>
+
+          <div id="profile-no-media-hint" class="no-media-hint hidden">
+            No media or files shared yet in this chat.
+          </div>
+        </div>
+
+        <!-- Friendship & Safety Options (Unfriend & Block) -->
+        <div class="profile-safety-section">
+          <button id="profile-btn-unfriend" type="button" class="btn-profile-unfriend">
+            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2"><path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path><circle cx="8.5" cy="7" r="4"></circle><line x1="18" y1="8" x2="23" y2="13"></line><line x1="23" y1="8" x2="18" y2="13"></line></svg>
+            <span>Unfriend Classmate</span>
+          </button>
+          <button id="profile-btn-block" type="button" class="btn-profile-block">
+            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><line x1="4.93" y1="4.93" x2="19.07" y2="19.07"></line></svg>
+            <span id="profile-block-label">Block Student</span>
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- FULLSCREEN IMAGE LIGHTBOX -->
+  <div id="modal-image-lightbox" class="modal-backdrop hidden lightbox-backdrop">
+    <div class="lightbox-container">
+      <button id="btn-close-lightbox" class="btn-close-lightbox">&times;</button>
+      <img id="lightbox-image" src="" alt="Full view" class="lightbox-img">
+    </div>
+  </div>
+
+  <!-- SETTINGS / MY PROFILE MODAL -->
+  <div id="modal-settings" class="modal-backdrop hidden">
+    <div class="modal-card settings-modal-card">
+      <div class="ios-sheet-handle"></div>
+      <div class="modal-header">
+        <button id="btn-close-settings-modal" class="btn-back-ios">
+          <svg viewBox="0 0 24 24" width="20" height="20" fill="#007AFF"><path d="M15.41 7.41L14 6l-6 6 6 6 1.41-1.41L10.83 12z"/></svg>
+          <span class="back-text">Done</span>
+        </button>
+        <h3>My Profile</h3>
+        <div style="width:40px"></div>
+      </div>
+      <div class="modal-body settings-modal-body">
+
+        <!-- Profile Picture Hero -->
+        <div class="settings-avatar-hero">
+          <div class="settings-avatar-wrap" id="settings-avatar-wrap">
+            <div id="settings-avatar-circle" class="avatar-circle settings-avatar-lg">U</div>
+            <button class="settings-avatar-camera-btn" id="btn-change-avatar" title="Change Photo">
+              <svg viewBox="0 0 24 24" width="18" height="18" fill="white"><path d="M12 15.2A3.2 3.2 0 1 1 12 8.8a3.2 3.2 0 0 1 0 6.4zm0-2a1.2 1.2 0 1 0 0-2.4 1.2 1.2 0 0 0 0 2.4zM9 2L7.17 4H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2h-3.17L15 2H9z"/></svg>
+            </button>
+          </div>
+          <div class="settings-avatar-actions-row">
+            <button id="btn-generate-avatar" class="btn-dicebear-pill" title="Generate creative avatar (Dicebear API)">
+              <span>🎲 Generate Cool Avatar</span>
+            </button>
+          </div>
+          <div id="settings-remove-photo-btn-wrap" class="hidden" style="text-align:center;margin-top:6px">
+            <button id="btn-remove-avatar" class="btn-text-danger">Remove Photo</button>
+          </div>
+        </div>
+
+        <!-- Display Name -->
+        <div class="settings-section">
+          <label class="settings-label">Display Name</label>
+          <div class="settings-input-row">
+            <input type="text" id="settings-display-name-input" class="settings-input" placeholder="Your name" maxlength="30">
+            <button id="btn-save-display-name" class="btn-settings-save">Save</button>
+          </div>
+        </div>
+
+        <!-- Change Username -->
+        <div class="settings-section">
+          <label class="settings-label">Username <span class="settings-label-hint">(@handle)</span></label>
+          <div class="settings-input-row">
+            <span class="settings-at">@</span>
+            <input type="text" id="settings-username-input" class="settings-input" placeholder="new_username" maxlength="20" autocomplete="off">
+            <button id="btn-save-username-change" class="btn-settings-save">Change</button>
+          </div>
+          <p class="settings-hint">⚠️ Changing your username updates your handle everywhere. Friends can still find you.</p>
+        </div>
+
+        <!-- Account Info (read-only) -->
+        <div class="settings-section">
+          <label class="settings-label">Account Info</label>
+          <div class="settings-info-row">
+            <span class="settings-info-key">📍 Campus</span>
+            <span class="settings-info-val">Kelowna Campus (KLO)</span>
+          </div>
+          <div class="settings-info-row">
+            <span class="settings-info-key">🎓 Program</span>
+            <span id="settings-major-val" class="settings-info-val">Okanagan College</span>
+          </div>
+        </div>
+
+        <!-- Notifications & Alerts Settings -->
+        <div class="settings-section">
+          <label class="settings-label">Notifications & Alerts</label>
+          <div class="settings-toggle-row">
+            <div class="toggle-info">
+              <strong>Push Notifications</strong>
+              <small>Receive alerts when messages or calls arrive</small>
+            </div>
+            <label class="ios-switch">
+              <input type="checkbox" id="toggle-push-notifications" checked>
+              <span class="ios-switch-slider"></span>
+            </label>
+          </div>
+          <div class="settings-toggle-row">
+            <div class="toggle-info">
+              <strong>Notification Sounds</strong>
+              <small>Play audio chime for incoming messages</small>
+            </div>
+            <label class="ios-switch">
+              <input type="checkbox" id="toggle-notification-sound" checked>
+              <span class="ios-switch-slider"></span>
+            </label>
+          </div>
+          <div class="settings-toggle-row">
+            <div class="toggle-info">
+              <strong>Message Previews</strong>
+              <small>Show message text preview in notification banner</small>
+            </div>
+            <label class="ios-switch">
+              <input type="checkbox" id="toggle-message-previews" checked>
+              <span class="ios-switch-slider"></span>
+            </label>
+          </div>
+        </div>
+
+        <!-- Blocked Students Manager -->
+        <div class="settings-section">
+          <label class="settings-label">Blocked Students <span id="settings-blocked-count" class="settings-label-hint">(0)</span></label>
+          <div id="settings-blocked-list" class="settings-blocked-list">
+            <p class="settings-empty-hint">No blocked students</p>
+          </div>
+        </div>
+
+        <!-- App & Device Installation Section -->
+        <div class="settings-section">
+          <label class="settings-label">App & Device Installation</label>
+          <div class="settings-install-box">
+            <div class="install-box-icon">📱</div>
+            <div class="install-box-info">
+              <strong>Install OC Connect App</strong>
+              <p>Add to your iPhone or Android home screen for full-screen view and quick access.</p>
+            </div>
+          </div>
+          <button id="btn-settings-install-app" type="button" class="btn-primary-block" style="margin-top:10px;">
+            <span>Install on This Device 📲</span>
+          </button>
+        </div>
+
+      </div>
+    </div>
+  </div>
+
+  <!-- INSTALL APP MODAL (NATIVE IOS / ANDROID PWA INSTALLATION GUIDE) -->
+  <div id="modal-install-app" class="modal-backdrop hidden">
+    <div class="modal-card install-modal-card">
+      <div class="ios-sheet-handle"></div>
+      <div class="modal-header">
+        <button id="btn-close-install-modal" class="btn-back-ios">
+          <svg viewBox="0 0 24 24" width="20" height="20" fill="#007AFF"><path d="M15.41 7.41L14 6l-6 6 6 6 1.41-1.41L10.83 12z"/></svg>
+          <span class="back-text">Done</span>
+        </button>
+        <h3>Install OC Connect</h3>
+        <div style="width:40px"></div>
+      </div>
+      <div class="modal-body install-modal-body">
+
+        <!-- Hero App Badge -->
+        <div class="install-hero">
+          <div class="install-app-icon">
+            <img src="/icons/icon-192.png" alt="OC Connect App Icon" />
+          </div>
+          <h4>OC Connect</h4>
+          <p class="install-hero-subtitle">Okanagan College Live Chat & Safety</p>
+          <span class="pwa-badge">Official Progressive Web App</span>
+        </div>
+
+        <!-- Platform Tabs -->
+        <div class="install-tabs-bar">
+          <button class="install-tab-btn active" data-platform="ios">🍎 iPhone / iPad</button>
+          <button class="install-tab-btn" data-platform="android">🤖 Android</button>
+          <button class="install-tab-btn" data-platform="desktop">💻 Mac / Windows</button>
+        </div>
+
+        <!-- iOS Instructions Panel -->
+        <div id="install-panel-ios" class="install-panel">
+          <div class="install-step-card">
+            <div class="step-badge">1</div>
+            <div class="step-content">
+              <strong>Open in Safari Browser</strong>
+              <p>Make sure you are viewing this page in Safari on your iPhone or iPad.</p>
+            </div>
+          </div>
+          <div class="install-step-card">
+            <div class="step-badge">2</div>
+            <div class="step-content">
+              <strong>Tap the Share Button</strong>
+              <p>Tap the <strong>Share</strong> button <span class="ios-icon-inline">􀈂</span> (the square with an arrow pointing up) at the bottom toolbar.</p>
+            </div>
+          </div>
+          <div class="install-step-card">
+            <div class="step-badge">3</div>
+            <div class="step-content">
+              <strong>Select "Add to Home Screen"</strong>
+              <p>Scroll down the share sheet and tap <strong>"Add to Home Screen"</strong> <span class="ios-icon-inline">􀎶</span>.</p>
+            </div>
+          </div>
+          <div class="install-step-card">
+            <div class="step-badge">4</div>
+            <div class="step-content">
+              <strong>Tap "Add" in the Top Right</strong>
+              <p>OC Connect will install directly onto your home screen with its official icon and full-screen support!</p>
+            </div>
+          </div>
+        </div>
+
+        <!-- Android Instructions Panel -->
+        <div id="install-panel-android" class="install-panel hidden">
+          <div id="android-native-install-prompt-box">
+            <button id="btn-trigger-android-pwa" type="button" class="btn-primary-block" style="margin-bottom:14px;background:#075E54;">
+              <span>⚡ 1-Tap Install on Android</span>
+            </button>
+          </div>
+          <div class="install-step-card">
+            <div class="step-badge">1</div>
+            <div class="step-content">
+              <strong>Tap the Chrome Menu (⋮)</strong>
+              <p>Tap the three vertical dots in the top-right corner of Google Chrome or Samsung Internet.</p>
+            </div>
+          </div>
+          <div class="install-step-card">
+            <div class="step-badge">2</div>
+            <div class="step-content">
+              <strong>Tap "Install app" or "Add to Home screen"</strong>
+              <p>Select <strong>"Install app"</strong> from the menu options.</p>
+            </div>
+          </div>
+          <div class="install-step-card">
+            <div class="step-badge">3</div>
+            <div class="step-content">
+              <strong>Confirm Installation</strong>
+              <p>Tap <strong>"Install"</strong>. OC Connect will appear in your app drawer and home screen just like any native app!</p>
+            </div>
+          </div>
+        </div>
+
+        <!-- Desktop (Mac / Windows / Chrome) Instructions Panel -->
+        <div id="install-panel-desktop" class="install-panel hidden">
+          <div class="install-step-card">
+            <div class="step-badge">1</div>
+            <div class="step-content">
+              <strong>Look for the Install Icon in the URL Bar</strong>
+              <p>In Chrome, Edge, or Brave on Mac/PC, click the <strong>Install</strong> icon ⊕ in the address bar.</p>
+            </div>
+          </div>
+          <div class="install-step-card">
+            <div class="step-badge">2</div>
+            <div class="step-content">
+              <strong>Launch in Dedicated Window</strong>
+              <p>OC Connect runs in its own distraction-free app window with dock/taskbar shortcuts and native notifications.</p>
+            </div>
+          </div>
+        </div>
+
+        <!-- Share link button -->
+        <div style="margin-top:16px;">
+          <button id="btn-copy-install-link" type="button" class="btn-secondary-block">
+            <span>Copy App Link to Share 🔗</span>
+          </button>
+        </div>
+
+      </div>
+    </div>
+  </div>
+
+  <!-- OKANAGAN COLLEGE CAMPUS WEATHER MODAL (Open-Meteo API) -->
+  <div id="modal-campus-weather" class="modal-backdrop hidden">
+    <div class="modal-card weather-modal-card">
+      <div class="ios-sheet-handle"></div>
+      <div class="modal-header">
+        <button id="btn-close-weather-modal" class="btn-back-ios">
+          <svg viewBox="0 0 24 24" width="20" height="20" fill="#007AFF"><path d="M15.41 7.41L14 6l-6 6 6 6 1.41-1.41L10.83 12z"/></svg>
+          <span class="back-text">Done</span>
+        </button>
+        <h3>Campus Weather</h3>
+        <div style="width:40px"></div>
+      </div>
+      <div class="modal-body weather-modal-body">
+        <div class="campus-selector-row">
+          <button class="campus-chip active" data-campus="klo">KLO Kelowna</button>
+          <button class="campus-chip" data-campus="vernon">Vernon</button>
+          <button class="campus-chip" data-campus="penticton">Penticton</button>
+          <button class="campus-chip" data-campus="salmon-arm">Salmon Arm</button>
+        </div>
+
+        <div class="weather-hero">
+          <span id="weather-detail-emoji" class="weather-hero-emoji">🌤️</span>
+          <div class="weather-hero-temp" id="weather-detail-temp">19°C</div>
+          <div class="weather-hero-condition" id="weather-detail-condition">Clear & Sunny</div>
+          <div class="weather-hero-campus" id="weather-detail-campus">Kelowna Campus (KLO)</div>
+        </div>
+
+        <div class="weather-stats-grid">
+          <div class="weather-stat-box">
+            <span class="stat-label">Humidity</span>
+            <span class="stat-val" id="weather-detail-humidity">45%</span>
+          </div>
+          <div class="weather-stat-box">
+            <span class="stat-label">Wind</span>
+            <span class="stat-val" id="weather-detail-wind">5 km/h</span>
+          </div>
+          <div class="weather-stat-box">
+            <span class="stat-label">Elevation</span>
+            <span class="stat-val">347m (Okanagan)</span>
+          </div>
+        </div>
+
+        <div class="weather-advice-card">
+          <span class="advice-icon">🚶</span>
+          <p id="weather-detail-advice">Great weather for walking between KLO Student Center and Library!</p>
+        </div>
+
+        <button id="btn-share-weather-chat" class="btn-primary-block">
+          Share Weather in Chat 💬
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- STUDY & ACADEMIC TOOLS MODAL (Wikipedia, Dictionary, Currency, Locations, Advice, Books, Jokes) -->
+  <div id="modal-study-tools" class="modal-backdrop hidden">
+    <div class="modal-card study-modal-card">
+      <div class="ios-sheet-handle"></div>
+      <div class="modal-header">
+        <button id="btn-close-study-modal" class="btn-back-ios">
+          <svg viewBox="0 0 24 24" width="20" height="20" fill="#007AFF"><path d="M15.41 7.41L14 6l-6 6 6 6 1.41-1.41L10.83 12z"/></svg>
+          <span class="back-text">Done</span>
+        </button>
+        <h3>Campus & Study Tools</h3>
+        <div style="width:40px"></div>
+      </div>
+      <div class="modal-body study-modal-body">
+        <p class="study-subtitle">Instant definitions, currency conversion, textbook search, campus pins, and study advice powered by 100% free open APIs.</p>
+
+        <!-- Segmented Tab Navigation for Study Tools -->
+        <div class="study-tabs-nav">
+          <button class="study-tab-btn active" data-study-view="dict">📖 Dictionary</button>
+          <button class="study-tab-btn" data-study-view="wiki">🌐 Wikipedia</button>
+          <button class="study-tab-btn" data-study-view="convert">💱 Currency</button>
+          <button class="study-tab-btn" data-study-view="places">📍 Meeting Pins</button>
+          <button class="study-tab-btn" data-study-view="books">📚 Textbooks</button>
+          <button class="study-tab-btn" data-study-view="fun">☕ Breaks & Advice</button>
+        </div>
+
+        <!-- Section 1: Dictionary & Vocabulary (Free Dictionary API) -->
+        <div id="study-panel-dict" class="study-panel active">
+          <div class="study-tool-box">
+            <div class="tool-title-row">
+              <span>📖 Academic Dictionary & Phonetics</span>
+            </div>
+            <div class="study-input-row">
+              <input type="text" id="dict-search-input" class="study-input" placeholder="e.g. algorithm, recursion, syllabus, database..." maxlength="50">
+              <button id="btn-submit-dict" class="btn-study-action">Define</button>
+            </div>
+            <div id="dict-result-preview" class="study-preview-card hidden"></div>
+          </div>
+        </div>
+
+        <!-- Section 2: Wikipedia Explainer -->
+        <div id="study-panel-wiki" class="study-panel hidden">
+          <div class="study-tool-box">
+            <div class="tool-title-row">
+              <span>🌐 Topic Explainer (Wikipedia)</span>
+            </div>
+            <div class="study-input-row">
+              <input type="text" id="wiki-search-input" class="study-input" placeholder="e.g. Binary Search, Mitochondria, Calculus..." maxlength="60">
+              <button id="btn-submit-wiki" class="btn-study-action">Search</button>
+            </div>
+            <div id="wiki-result-preview" class="study-preview-card hidden"></div>
+          </div>
+        </div>
+
+        <!-- Section 3: Currency Converter (Open Exchange API) -->
+        <div id="study-panel-convert" class="study-panel hidden">
+          <div class="study-tool-box">
+            <div class="tool-title-row">
+              <span>💱 Student Currency Converter (Tuition & Living)</span>
+            </div>
+            <div class="currency-calc-grid">
+              <div class="curr-input-group">
+                <label>Amount</label>
+                <input type="number" id="curr-amount-input" class="study-input" value="100" min="1" step="any">
+              </div>
+              <div class="curr-input-group">
+                <label>From</label>
+                <select id="curr-from-select" class="study-select">
+                  <option value="CAD" selected>CAD ($)</option>
+                  <option value="USD">USD ($)</option>
+                  <option value="INR">INR (₹)</option>
+                  <option value="EUR">EUR (€)</option>
+                  <option value="GBP">GBP (£)</option>
+                  <option value="AUD">AUD ($)</option>
+                  <option value="CNY">CNY (¥)</option>
+                  <option value="PHP">PHP (₱)</option>
+                  <option value="JPY">JPY (¥)</option>
+                </select>
+              </div>
+              <div class="curr-input-group">
+                <label>To</label>
+                <select id="curr-to-select" class="study-select">
+                  <option value="INR" selected>INR (₹)</option>
+                  <option value="USD">USD ($)</option>
+                  <option value="CAD">CAD ($)</option>
+                  <option value="EUR">EUR (€)</option>
+                  <option value="GBP">GBP (£)</option>
+                  <option value="AUD">AUD ($)</option>
+                  <option value="CNY">CNY (¥)</option>
+                  <option value="PHP">PHP (₱)</option>
+                  <option value="JPY">JPY (¥)</option>
+                </select>
+              </div>
+            </div>
+            <button id="btn-submit-convert" class="btn-primary-block" style="margin-top:10px;">Convert Live Rates</button>
+            <div id="curr-result-preview" class="study-preview-card hidden"></div>
+          </div>
+        </div>
+
+        <!-- Section 4: Campus Meeting Pins & Maps -->
+        <div id="study-panel-places" class="study-panel hidden">
+          <div class="study-tool-box">
+            <div class="tool-title-row">
+              <span>📍 Okanagan College Campus Meeting Pins</span>
+            </div>
+            <p class="section-subtext">Tap any location to view details or share an interactive pin directly in chat:</p>
+            <div id="campus-pins-list" class="campus-pins-grid">
+              <!-- Dynamically populated -->
+            </div>
+          </div>
+        </div>
+
+        <!-- Section 5: Course Textbooks (Open Library) -->
+        <div id="study-panel-books" class="study-panel hidden">
+          <div class="study-tool-box">
+            <div class="tool-title-row">
+              <span>📚 Find Course Textbook (Open Library)</span>
+            </div>
+            <div class="study-input-row">
+              <input type="text" id="book-search-input" class="study-input" placeholder="e.g. Python Crash Course, Organic Chemistry..." maxlength="60">
+              <button id="btn-submit-book" class="btn-study-action">Find</button>
+            </div>
+            <div id="book-result-preview" class="study-preview-card hidden"></div>
+          </div>
+        </div>
+
+        <!-- Section 6: Breaks, Advice & Jokes -->
+        <div id="study-panel-fun" class="study-panel hidden">
+          <div class="study-tool-box">
+            <div class="tool-title-row">
+              <span>💡 Daily Student Advice (Advice Slip API)</span>
+            </div>
+            <button id="btn-get-advice" class="btn-secondary-pill">Get Study Advice Tip</button>
+            <div id="advice-result-preview" class="joke-preview-card hidden"></div>
+          </div>
+
+          <div class="study-tool-box" style="margin-top:12px;">
+            <div class="tool-title-row">
+              <span>😂 Study Break Joke (Official Joke API)</span>
+            </div>
+            <button id="btn-get-joke" class="btn-secondary-pill">Tell a Study Joke</button>
+            <div id="joke-result-preview" class="joke-preview-card hidden"></div>
+          </div>
+        </div>
+
+        <!-- Quick Slash Command Hint -->
+        <div class="slash-commands-hint">
+          <strong>⚡ Slash Commands:</strong> In any chat, type <code>/define &lt;word&gt;</code>, <code>/convert 100 CAD to INR</code>, <code>/advice</code>, <code>/location</code>, <code>/wiki &lt;topic&gt;</code>, <code>/book &lt;title&gt;</code>, or <code>/weather</code>.
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- CLASSMATE QR CODE CONNECT MODAL (QR Server API) -->
+  <div id="modal-qr-code" class="modal-backdrop hidden">
+    <div class="modal-card qr-modal-card">
+      <div class="ios-sheet-handle"></div>
+      <div class="modal-header">
+        <button id="btn-close-qr-modal" class="btn-back-ios">
+          <svg viewBox="0 0 24 24" width="20" height="20" fill="#007AFF"><path d="M15.41 7.41L14 6l-6 6 6 6 1.41-1.41L10.83 12z"/></svg>
+          <span class="back-text">Done</span>
+        </button>
+        <h3>My Campus QR</h3>
+        <div style="width:40px"></div>
+      </div>
+      <div class="modal-body qr-modal-body">
+        <div class="qr-hero-card">
+          <div class="qr-code-frame">
+            <img id="my-qr-image" src="" alt="My Campus QR Code" class="qr-image-display" />
+          </div>
+          <div class="qr-user-info">
+            <h4 id="qr-display-name">Alex M.</h4>
+            <p id="qr-handle">@alex_oc</p>
+            <span class="qr-tag">Okanagan College Student</span>
+          </div>
+        </div>
+        <p class="qr-instruction">Have a classmate scan this QR code with their camera or OC Connect to instantly add you as a peer!</p>
+        <div class="qr-actions-row">
+          <button id="btn-copy-qr-link" class="btn-primary-block">Copy My Connect Link 🔗</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- IN-APP DOCUMENT & BOOK VIEWER MODAL (PDFs, eBooks, Articles, Documents) -->
+  <div id="modal-document-viewer" class="modal-backdrop hidden">
+    <div class="modal-card document-viewer-card">
+      <div class="ios-sheet-handle"></div>
+      <div class="modal-header">
+        <button id="btn-close-doc-viewer" type="button" class="btn-back-ios">
+          <svg viewBox="0 0 24 24" width="20" height="20" fill="#007AFF" style="pointer-events: none;"><path d="M15.41 7.41L14 6l-6 6 6 6 1.41-1.41L10.83 12z"/></svg>
+          <span class="back-text">Done</span>
+        </button>
+        <h3 id="doc-viewer-title" class="doc-title-truncated">Course Document</h3>
+        <button id="btn-doc-download-header" type="button" class="icon-btn" title="Download Document">
+          <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="#007AFF" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="pointer-events: none;">
+            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+            <polyline points="7 10 12 15 17 10"/>
+            <line x1="12" y1="15" x2="12" y2="3"/>
+          </svg>
+        </button>
+      </div>
+      <div class="modal-body doc-viewer-body">
+        <div class="doc-viewer-meta-card">
+          <div class="doc-meta-icon" id="doc-meta-icon">📄</div>
+          <div class="doc-meta-details">
+            <h4 id="doc-meta-name">Filename.pdf</h4>
+            <p id="doc-meta-size">2.4 MB • Document</p>
+          </div>
+        </div>
+        <div class="doc-viewer-actions">
+          <button id="btn-doc-open-external" type="button" class="btn-primary-block">
+            <span>Open & Read in Browser 📖</span>
+          </button>
+          <button id="btn-doc-download-direct" type="button" class="btn-secondary-block">
+            <span>Download & Save File 💾</span>
+          </button>
+        </div>
+        <!-- Embedded Preview for PDFs / Text -->
+        <div id="doc-preview-container" class="doc-preview-frame-wrap hidden">
+          <iframe id="doc-preview-iframe" title="Document Preview" class="doc-preview-frame"></iframe>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- IN-APP ARTICLE & STUDY BOOK READER MODAL (Wikipedia & Open Library) -->
+  <div id="modal-article-reader" class="modal-backdrop hidden">
+    <div class="modal-card article-reader-card">
+      <div class="ios-sheet-handle"></div>
+      <div class="modal-header">
+        <button id="btn-close-article-reader" type="button" class="btn-back-ios">
+          <svg viewBox="0 0 24 24" width="20" height="20" fill="#007AFF" style="pointer-events: none;"><path d="M15.41 7.41L14 6l-6 6 6 6 1.41-1.41L10.83 12z"/></svg>
+          <span class="back-text">Done</span>
+        </button>
+        <h3 id="article-reader-type-title">Study Article</h3>
+        <div style="width:40px"></div>
+      </div>
+      <div class="modal-body article-reader-body">
+        <div class="article-reader-hero">
+          <span class="article-reader-badge" id="article-reader-badge">Wikipedia</span>
+          <h2 id="article-reader-title">Topic Title</h2>
+          <p id="article-reader-byline" class="article-byline hidden"></p>
+        </div>
+        <div class="article-reader-content" id="article-reader-text">
+          <!-- Text extract -->
+        </div>
+        <div class="article-reader-footer-actions">
+          <button id="btn-article-open-source" type="button" class="btn-primary-block">
+            <span id="article-open-source-label">Read Full Source Article ↗</span>
+          </button>
+          <button id="btn-article-copy-text" type="button" class="btn-secondary-block">
+            <span>Copy Text to Clipboard 📋</span>
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ========================================== -->
+  <!-- 1. CREATE NEW GROUP MODAL (WhatsApp-Style) -->
+  <!-- ========================================== -->
+  <div id="modal-create-group" class="modal-backdrop hidden">
+    <div class="modal-card create-group-card">
+      <div class="ios-sheet-handle"></div>
+      <div class="modal-header">
+        <button id="btn-close-create-group" type="button" class="btn-back-ios">
+          <svg viewBox="0 0 24 24" width="20" height="20" fill="#007AFF" style="pointer-events: none;"><path d="M15.41 7.41L14 6l-6 6 6 6 1.41-1.41L10.83 12z"/></svg>
+          <span class="back-text">Cancel</span>
+        </button>
+        <h3>New Group</h3>
+        <button id="btn-submit-create-group" type="button" class="btn-text-action" style="color: #007AFF; font-weight: 600; font-size: 15px;">Create</button>
+      </div>
+
+      <div class="modal-body create-group-body">
+        <!-- Group Identity Card -->
+        <div class="group-identity-section">
+          <div class="group-avatar-picker-wrap">
+            <div id="new-group-avatar-preview" class="group-avatar-preview" style="background-color: #075E54;">
+              <span id="new-group-avatar-icon">👥</span>
+            </div>
+            <label for="new-group-avatar-file" class="group-avatar-upload-btn" title="Upload Group Photo">
+              📷
+            </label>
+            <input type="file" id="new-group-avatar-file" accept="image/*" style="display: none;">
+          </div>
+          
+          <div class="group-inputs-col">
+            <div class="input-with-counter">
+              <input type="text" id="new-group-name-input" class="modern-text-input" placeholder="Group Subject (e.g. COSC 111 Study)" maxlength="50" autocomplete="off">
+              <span id="group-name-counter" class="char-counter">50</span>
+            </div>
+            <input type="text" id="new-group-desc-input" class="modern-text-input" placeholder="Description (optional, e.g. KLO Library Prep)" maxlength="120" autocomplete="off">
+          </div>
+        </div>
+
+        <!-- Group Color Themes -->
+        <div class="group-theme-picker-row">
+          <span class="picker-label">Color Theme:</span>
+          <div class="theme-colors-tray" id="group-theme-colors">
+            <button type="button" class="color-dot active" data-color="#075E54" style="background-color: #075E54;"></button>
+            <button type="button" class="color-dot" data-color="#128C7E" style="background-color: #128C7E;"></button>
+            <button type="button" class="color-dot" data-color="#007AFF" style="background-color: #007AFF;"></button>
+            <button type="button" class="color-dot" data-color="#5856D6" style="background-color: #5856D6;"></button>
+            <button type="button" class="color-dot" data-color="#9C27B0" style="background-color: #9C27B0;"></button>
+            <button type="button" class="color-dot" data-color="#E54238" style="background-color: #E54238;"></button>
+            <button type="button" class="color-dot" data-color="#FF9800" style="background-color: #FF9800;"></button>
+          </div>
+        </div>
+
+        <!-- Selected Participants Chips Tray -->
+        <div class="selected-chips-section">
+          <div class="chips-header">
+            <span class="chips-title">PARTICIPANTS (<span id="create-group-selected-count">0</span> SELECTED)</span>
+          </div>
+          <div id="create-group-chips-tray" class="chips-horizontal-tray">
+            <span class="chips-empty-hint">Select classmates below to add to group</span>
+          </div>
+        </div>
+
+        <!-- Search & Classmates Selection List -->
+        <div class="group-members-picker-section">
+          <div class="search-box small-search">
+            <span class="search-icon">🔍</span>
+            <input type="text" id="create-group-search-input" placeholder="Search friends & classmates...">
+          </div>
+          <div id="create-group-classmates-list" class="classmates-selection-list">
+            <!-- Dynamic Classmate Select Items -->
+          </div>
+        </div>
+
+        <button id="btn-create-group-confirm" type="button" class="btn-primary-block" style="margin-top: 14px;">
+          <span>Create Group 👥</span>
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ========================================== -->
+  <!-- 2. GROUP INFO DRAWER / MODAL (WhatsApp-Style) -->
+  <!-- ========================================== -->
+  <div id="modal-group-info" class="modal-backdrop hidden">
+    <div class="modal-card group-info-card">
+      <div class="ios-sheet-handle"></div>
+      <div class="modal-header">
+        <button id="btn-close-group-info" type="button" class="btn-back-ios">
+          <svg viewBox="0 0 24 24" width="20" height="20" fill="#007AFF" style="pointer-events: none;"><path d="M15.41 7.41L14 6l-6 6 6 6 1.41-1.41L10.83 12z"/></svg>
+          <span class="back-text">Back</span>
+        </button>
+        <h3>Group Info</h3>
+        <button id="btn-group-info-edit" type="button" class="btn-text-action" style="color: #007AFF; font-size: 14px;">Edit</button>
+      </div>
+
+      <div class="modal-body group-info-body">
+        <!-- Hero Group Profile -->
+        <div class="group-hero-card">
+          <div id="group-info-avatar-hero" class="group-info-avatar-hero" style="background-color: #075E54;">
+            <span id="group-info-avatar-text">👥</span>
+          </div>
+          <h2 id="group-info-name" class="group-hero-title">Study Group</h2>
+          <p id="group-info-meta" class="group-hero-meta">Group • 0 participants</p>
+          <p id="group-info-created-by" class="group-created-by">Created by @alex</p>
+        </div>
+
+        <!-- Group Description Box -->
+        <div class="group-desc-card">
+          <div class="desc-card-header">
+            <span>Description</span>
+          </div>
+          <p id="group-info-desc-text" class="group-desc-text">No description added yet.</p>
+        </div>
+
+        <!-- Add Participants Action -->
+        <div class="group-action-row">
+          <button id="btn-open-add-participants" type="button" class="btn-group-action-pill">
+            <span class="action-icon">➕</span>
+            <span>Add Participants</span>
+          </button>
+          <button id="btn-copy-group-link" type="button" class="btn-group-action-pill">
+            <span class="action-icon">🔗</span>
+            <span>Share Group Link</span>
+          </button>
+        </div>
+
+        <!-- Participants Section -->
+        <div class="group-participants-section">
+          <div class="participants-section-header">
+            <span class="section-title">PARTICIPANTS (<span id="group-info-participants-count">0</span>)</span>
+            <span id="group-info-admin-badge-count" class="admin-summary-tag">1 Admin</span>
+          </div>
+          <div id="group-info-participants-list" class="group-participants-list">
+            <!-- Dynamic Participant Rows -->
+          </div>
+        </div>
+
+        <!-- Danger Zone: Exit / Delete Group -->
+        <div class="group-danger-section">
+          <button id="btn-exit-group" type="button" class="btn-danger-item">
+            <span class="danger-icon">🚪</span>
+            <span>Exit Group</span>
+          </button>
+          <button id="btn-delete-group" type="button" class="btn-danger-item hidden">
+            <span class="danger-icon">🗑️</span>
+            <span>Delete Group</span>
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ========================================== -->
+  <!-- 3. ADD GROUP PARTICIPANTS MODAL -->
+  <!-- ========================================== -->
+  <div id="modal-add-group-members" class="modal-backdrop hidden">
+    <div class="modal-card add-members-card">
+      <div class="ios-sheet-handle"></div>
+      <div class="modal-header">
+        <button id="btn-close-add-members" type="button" class="btn-back-ios">
+          <svg viewBox="0 0 24 24" width="20" height="20" fill="#007AFF" style="pointer-events: none;"><path d="M15.41 7.41L14 6l-6 6 6 6 1.41-1.41L10.83 12z"/></svg>
+          <span class="back-text">Cancel</span>
+        </button>
+        <h3>Add Participants</h3>
+        <button id="btn-submit-add-members" type="button" class="btn-text-action" style="color: #007AFF; font-weight: 600; font-size: 15px;">Add</button>
+      </div>
+
+      <div class="modal-body add-members-body">
+        <div class="search-box">
+          <span class="search-icon">🔍</span>
+          <input type="text" id="add-members-search-input" placeholder="Search friends & classmates...">
+        </div>
+        <div id="add-members-classmates-list" class="classmates-selection-list" style="margin-top: 12px; max-height: 380px;">
+          <!-- Dynamic Selectable Classmates -->
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ========================================== -->
+  <!-- 4. GOOGLE MESSAGES: MAGIC COMPOSE AI MODAL -->
+  <!-- ========================================== -->
+  <div id="modal-magic-compose" class="modal-backdrop hidden">
+    <div class="modal-card magic-compose-card">
+      <div class="ios-sheet-handle"></div>
+      <div class="modal-header">
+        <button id="btn-close-magic-compose" type="button" class="btn-back-ios">
+          <svg viewBox="0 0 24 24" width="20" height="20" fill="#007AFF" style="pointer-events: none;"><path d="M15.41 7.41L14 6l-6 6 6 6 1.41-1.41L10.83 12z"/></svg>
+          <span class="back-text">Done</span>
+        </button>
+        <div class="header-title-sparkle">
+          <span class="sparkle-icon">✨</span>
+          <h3>Magic Compose</h3>
+        </div>
+        <button id="btn-apply-magic-compose" type="button" class="btn-text-action" style="color: #AF52DE; font-weight: 600; font-size: 15px;">Insert</button>
+      </div>
+
+      <div class="modal-body magic-compose-body">
+        <p class="magic-compose-subtitle">Rewrite drafts with Google Messages AI styles for college professors, team leads, or casual study buddies.</p>
+
+        <!-- Draft Input Area -->
+        <div class="magic-input-wrapper">
+          <label>Original Draft</label>
+          <textarea id="magic-compose-input" rows="2" placeholder="Type or paste your message draft here..."></textarea>
+        </div>
+
+        <!-- Tone Styles Palette -->
+        <div class="magic-tones-grid">
+          <button class="tone-btn active" data-style="formal">
+            <span class="tone-emoji">🎓</span>
+            <span class="tone-name">Formal</span>
+            <span class="tone-desc">Academic & polite</span>
+          </button>
+          <button class="tone-btn" data-style="concise">
+            <span class="tone-emoji">⚡</span>
+            <span class="tone-name">Concise</span>
+            <span class="tone-desc">Short & direct</span>
+          </button>
+          <button class="tone-btn" data-style="excited">
+            <span class="tone-emoji">🔥</span>
+            <span class="tone-name">Excited</span>
+            <span class="tone-desc">High energy</span>
+          </button>
+          <button class="tone-btn" data-style="chill">
+            <span class="tone-emoji">🤙</span>
+            <span class="tone-name">Chill</span>
+            <span class="tone-desc">Casual student</span>
+          </button>
+          <button class="tone-btn" data-style="shakespeare">
+            <span class="tone-emoji">📜</span>
+            <span class="tone-name">Shakespeare</span>
+            <span class="tone-desc">Poetic drama</span>
+          </button>
+          <button class="tone-btn" data-style="proofread">
+            <span class="tone-emoji">✨</span>
+            <span class="tone-name">Fix Grammar</span>
+            <span class="tone-desc">Clean typos</span>
+          </button>
+        </div>
+
+        <!-- AI Output Preview Card -->
+        <div class="magic-output-card">
+          <div class="magic-output-header">
+            <span id="magic-output-badge" class="badge-tone">🎓 Formal</span>
+            <button id="btn-copy-magic-compose" type="button" class="btn-icon-subtle" title="Copy Text">📋</button>
+          </div>
+          <div id="magic-compose-output" class="magic-output-text">
+            Generating AI rewrite...
+          </div>
+        </div>
+
+        <div class="magic-action-buttons">
+          <button id="btn-send-magic-now" class="btn-primary-block" style="background: linear-gradient(135deg, #AF52DE, #5856D6);">
+            <span>Send Rewritten Message</span>
+            <svg viewBox="0 0 24 24" width="16" height="16" fill="white"><path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/></svg>
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ========================================== -->
+  <!-- 5. GOOGLE MESSAGES: SCHEDULE SEND MODAL -->
+  <!-- ========================================== -->
+  <div id="modal-schedule-message" class="modal-backdrop hidden">
+    <div class="modal-card schedule-modal-card">
+      <div class="ios-sheet-handle"></div>
+      <div class="modal-header">
+        <button id="btn-close-schedule-modal" type="button" class="btn-back-ios">
+          <svg viewBox="0 0 24 24" width="20" height="20" fill="#007AFF" style="pointer-events: none;"><path d="M15.41 7.41L14 6l-6 6 6 6 1.41-1.41L10.83 12z"/></svg>
+          <span class="back-text">Cancel</span>
+        </button>
+        <h3>Schedule Send</h3>
+        <div style="width: 40px;"></div>
+      </div>
+
+      <div class="modal-body schedule-modal-body">
+        <p class="schedule-subtitle">Pick a time when this message should automatically send to your classmate or group.</p>
+
+        <!-- Draft Preview -->
+        <div class="schedule-draft-box">
+          <span class="draft-tag">Message Content</span>
+          <p id="schedule-draft-preview" class="draft-text">Message draft...</p>
+        </div>
+
+        <!-- Quick Presets -->
+        <div class="schedule-presets-list">
+          <button class="schedule-preset-btn" id="preset-later-today">
+            <div class="preset-left">
+              <span class="preset-icon">☀️</span>
+              <div class="preset-info">
+                <strong>Later Today</strong>
+                <span id="preset-later-today-time">6:00 PM</span>
+              </div>
+            </div>
+            <span class="preset-arrow">›</span>
+          </button>
+
+          <button class="schedule-preset-btn" id="preset-tomorrow-morning">
+            <div class="preset-left">
+              <span class="preset-icon">🌅</span>
+              <div class="preset-info">
+                <strong>Tomorrow Morning</strong>
+                <span id="preset-tomorrow-morning-time">8:00 AM</span>
+              </div>
+            </div>
+            <span class="preset-arrow">›</span>
+          </button>
+
+          <button class="schedule-preset-btn" id="preset-tomorrow-afternoon">
+            <div class="preset-left">
+              <span class="preset-icon">🎓</span>
+              <div class="preset-info">
+                <strong>Tomorrow Afternoon</strong>
+                <span id="preset-tomorrow-afternoon-time">1:00 PM</span>
+              </div>
+            </div>
+            <span class="preset-arrow">›</span>
+          </button>
+        </div>
+
+        <!-- Custom Date/Time Selector -->
+        <div class="custom-schedule-section">
+          <div class="section-divider-text">OR PICK CUSTOM DATE & TIME</div>
+          <div class="schedule-datetime-inputs">
+            <input type="datetime-local" id="custom-schedule-datetime" class="study-input">
+          </div>
+          <button id="btn-submit-custom-schedule" class="btn-primary-block" style="margin-top: 12px; background: #FF9500;">
+            <span>Schedule Message ⏰</span>
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ========================================== -->
+  <!-- 6. GOOGLE MESSAGES: STARRED MESSAGES DRAWER -->
+  <!-- ========================================== -->
+  <div id="modal-starred-messages" class="modal-backdrop hidden">
+    <div class="modal-card starred-modal-card">
+      <div class="ios-sheet-handle"></div>
+      <div class="modal-header">
+        <button id="btn-close-starred-modal" type="button" class="btn-back-ios">
+          <svg viewBox="0 0 24 24" width="20" height="20" fill="#007AFF" style="pointer-events: none;"><path d="M15.41 7.41L14 6l-6 6 6 6 1.41-1.41L10.83 12z"/></svg>
+          <span class="back-text">Back</span>
+        </button>
+        <div class="header-title-sparkle">
+          <span style="color: #FF9500;">⭐</span>
+          <h3>Starred Messages</h3>
+        </div>
+        <div style="width: 40px;"></div>
+      </div>
+
+      <div class="modal-body starred-modal-body">
+        <div class="search-box">
+          <span class="search-icon">🔍</span>
+          <input type="text" id="starred-search-input" placeholder="Search saved bookmarks, homework, links...">
+        </div>
+
+        <div id="starred-messages-list" class="starred-messages-list" style="margin-top: 12px; max-height: 480px; overflow-y: auto;">
+          <!-- Dynamic Starred Message Cards -->
+        </div>
+
+        <div id="no-starred-placeholder" class="empty-placeholder hidden" style="padding: 40px 16px;">
+          <div class="empty-icon">⭐</div>
+          <h3>No Starred Messages</h3>
+          <p>Hover or tap any message in chat and click the Star icon to bookmark important assignment links, room numbers, and study notes!</p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ========================================== -->
+  <!-- 7. VIEW SCHEDULED MESSAGES MODAL -->
+  <!-- ========================================== -->
+  <div id="modal-view-scheduled" class="modal-backdrop hidden">
+    <div class="modal-card view-scheduled-card">
+      <div class="ios-sheet-handle"></div>
+      <div class="modal-header">
+        <button id="btn-close-view-scheduled" type="button" class="btn-back-ios">
+          <svg viewBox="0 0 24 24" width="20" height="20" fill="#007AFF" style="pointer-events: none;"><path d="M15.41 7.41L14 6l-6 6 6 6 1.41-1.41L10.83 12z"/></svg>
+          <span class="back-text">Back</span>
+        </button>
+        <h3>Pending Scheduled Messages</h3>
+        <div style="width: 40px;"></div>
+      </div>
+
+      <div class="modal-body view-scheduled-body">
+        <div id="view-scheduled-list" class="scheduled-list-container">
+          <!-- Dynamic Scheduled Message Items -->
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- CAMPUS CELEBRATION & SCREEN EFFECTS OVERLAY (Confetti, Stars, Coffee, Safe) -->
+  <canvas id="screen-effects-canvas" class="screen-effects-canvas"></canvas>
+
+  <script src="app.js"></script>
+</body>
+</html>

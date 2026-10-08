@@ -1,0 +1,22 @@
+{
+  "name": "oc-connect",
+  "version": "1.0.0",
+  "description": "OC Connect - Okanagan College Student Peer Chat & Campus Safety",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "engines": {
+    "node": ">=22.0.0"
+  },
+  "keywords": [
+    "okanagan-college",
+    "chat",
+    "pwa",
+    "realtime",
+    "campus-safety",
+    "sqlite"
+  ],
+  "author": "Okanagan College Students",
+  "license": "MIT"
+}

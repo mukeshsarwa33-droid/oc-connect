@@ -1,0 +1,22 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <defs>
+    <linearGradient id="ocGrad" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#075E54" />
+      <stop offset="100%" stop-color="#128C7E" />
+    </linearGradient>
+    <filter id="shadow" x="-10%" y="-10%" width="120%" height="120%">
+      <feDropShadow dx="0" dy="8" stdDeviation="12" flood-color="#000000" flood-opacity="0.3"/>
+    </filter>
+  </defs>
+  <rect width="512" height="512" rx="115" fill="url(#ocGrad)"/>
+  <circle cx="256" cy="240" r="190" fill="#054C44" stroke="#FFC107" stroke-width="12" filter="url(#shadow)"/>
+  <!-- Graduation Cap -->
+  <path d="M256 100 L380 160 L256 220 L132 160 Z" fill="#FFFFFF"/>
+  <path d="M190 190 L190 240 Q256 280 322 240 L322 190" fill="none" stroke="#FFFFFF" stroke-width="12"/>
+  <circle cx="390" cy="180" r="10" fill="#FFC107"/>
+  <!-- OC Monogram -->
+  <text x="180" y="360" font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Display', Roboto, sans-serif" font-weight="900" font-size="140" fill="#FFFFFF" text-anchor="middle">O</text>
+  <text x="330" y="360" font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Display', Roboto, sans-serif" font-weight="900" font-size="140" fill="#FFFFFF" text-anchor="middle">C</text>
+  <!-- Live Pulse Dot -->
+  <circle cx="256" cy="425" r="14" fill="#25D366" stroke="#FFFFFF" stroke-width="4"/>
+</svg>

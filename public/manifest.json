@@ -1,0 +1,65 @@
+{
+  "name": "OC Connect - Okanagan College Live Chat",
+  "short_name": "OC Connect",
+  "description": "Real-time student peer chat, voice calls, campus safety, and academic study tools for Okanagan College students.",
+  "start_url": "/?source=pwa",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait-primary",
+  "background_color": "#075E54",
+  "theme_color": "#075E54",
+  "dir": "ltr",
+  "lang": "en-US",
+  "id": "/?source=pwa",
+  "categories": ["social", "education", "productivity", "utilities"],
+  "icons": [
+    {
+      "src": "/icons/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icons/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icons/maskable-icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    },
+    {
+      "src": "/icons/icon.svg",
+      "sizes": "512x512",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "Live Campus Weather",
+      "short_name": "Weather",
+      "description": "Check live Okanagan College campus weather and forecast",
+      "url": "/#weather",
+      "icons": [{ "src": "/icons/icon-192.png", "sizes": "192x192" }]
+    },
+    {
+      "name": "My Campus QR Code",
+      "short_name": "My QR",
+      "description": "Show your student connect QR code to a classmate",
+      "url": "/#qr",
+      "icons": [{ "src": "/icons/icon-192.png", "sizes": "192x192" }]
+    },
+    {
+      "name": "Campus Safety SOS",
+      "short_name": "Safety SOS",
+      "description": "Quick access to 24/7 Okanagan College campus security",
+      "url": "/#sos",
+      "icons": [{ "src": "/icons/icon-192.png", "sizes": "192x192" }]
+    }
+  ],
+  "display_override": ["standalone", "window-controls-overlay", "minimal-ui"]
+}
