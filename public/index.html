@@ -9,6 +9,15 @@
     if (location.protocol === 'http:' && location.hostname !== 'localhost' && location.hostname !== '127.0.0.1') {
       location.replace('https://' + location.host + location.pathname + location.search + location.hash);
     }
+    // Instant Dark Mode bootstrap to prevent flash of unstyled theme
+    try {
+      const savedTheme = localStorage.getItem('oc_theme');
+      if (savedTheme === 'dark' || (!savedTheme && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
+        document.documentElement.setAttribute('data-theme', 'dark');
+      } else {
+        document.documentElement.removeAttribute('data-theme');
+      }
+    } catch (_) {}
   </script>
   <link rel="manifest" href="/manifest.json">
   <meta name="theme-color" content="#075E54">
@@ -274,18 +283,6 @@
     <main class="tabs-container">
       <!-- TAB 1: CHATS -->
       <section id="tab-chats" class="tab-content active">
-        <!-- DAILY STUDENT INSPIRATION BANNER (Quotes API) -->
-        <div id="motivation-banner" class="motivation-banner">
-          <div class="motivation-content">
-            <span class="motivation-icon">💡</span>
-            <div class="motivation-text-wrap">
-              <span id="motivation-quote" class="motivation-quote">"Live as if you were to die tomorrow. Learn as if you were to live forever."</span>
-              <span id="motivation-author" class="motivation-author">— Mahatma Gandhi</span>
-            </div>
-          </div>
-          <button id="btn-refresh-quote" class="btn-icon-subtle" title="New Study Motivation Quote">↻</button>
-        </div>
-
         <!-- SEARCH BAR & GOOGLE MESSAGES CATEGORIES -->
         <div class="chats-search-section">
           <div class="search-box">
@@ -1038,6 +1035,23 @@
               <span class="settings-read-label">Student ID</span>
               <span id="settings-ocid-val" class="settings-read-value">••••••••</span>
             </div>
+          </div>
+        </div>
+
+        <!-- Appearance & Theme Card -->
+        <div class="settings-card-group">
+          <div class="settings-group-header">
+            <span>APPEARANCE & THEME</span>
+          </div>
+          <div class="settings-toggle-row">
+            <div class="toggle-info">
+              <strong>Dark Mode</strong>
+              <small>OLED pitch black theme with high contrast</small>
+            </div>
+            <label class="ios-switch">
+              <input type="checkbox" id="toggle-dark-mode">
+              <span class="ios-switch-slider"></span>
+            </label>
           </div>
         </div>
 

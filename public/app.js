@@ -315,11 +315,6 @@ const el = {
   qrDisplayName: document.getElementById('qr-display-name'),
   qrHandle: document.getElementById('qr-handle'),
   btnCopyQrLink: document.getElementById('btn-copy-qr-link'),
-  // Motivation Banner Elements (Quotes API)
-  motivationBanner: document.getElementById('motivation-banner'),
-  motivationQuote: document.getElementById('motivation-quote'),
-  motivationAuthor: document.getElementById('motivation-author'),
-  btnRefreshQuote: document.getElementById('btn-refresh-quote'),
   // Study Tools Elements (Wikipedia, Dictionary, Currency, Locations, Advice, Books, Jokes)
   btnStudyTools: document.getElementById('btn-study-tools'),
   modalStudyTools: document.getElementById('modal-study-tools'),
@@ -1193,7 +1188,6 @@ function showMainScreen() {
   loadFriendRequests();
   loadCampusDirectory();
   loadCampusWeather();
-  loadDailyMotivation();
 
   // Initialize WhatsApp-style Group Modals
   initCreateGroupModal();
@@ -6132,7 +6126,8 @@ const elSettings = {
   majorVal: document.getElementById('settings-major-val'),
   ocidVal: document.getElementById('settings-ocid-val'),
   btnLogout: document.getElementById('btn-settings-logout'),
-  avatarFileInput: document.getElementById('avatar-file-input')
+  avatarFileInput: document.getElementById('avatar-file-input'),
+  toggleDarkMode: document.getElementById('toggle-dark-mode')
 };
 
 function openSettingsModal() {
@@ -6166,6 +6161,11 @@ function openSettingsModal() {
   // Load Notification settings & Blocked students list
   initNotificationSettings();
   loadBlockedStudentsList();
+
+  // Sync Dark Mode Switch
+  if (elSettings.toggleDarkMode) {
+    elSettings.toggleDarkMode.checked = document.documentElement.getAttribute('data-theme') === 'dark';
+  }
 
   openModal(elSettings.modal);
 }
@@ -6478,6 +6478,51 @@ const showMainScreenPatched = function() {
 document.addEventListener('oc-connect-main-shown', updateAllMyAvatarInstances);
 
 // ===========================================================================
+// DARK MODE / THEME CONTROLLER
+// ===========================================================================
+function applyAppTheme(theme, save = true) {
+  const metaTheme = document.querySelector('meta[name="theme-color"]');
+  if (theme === 'dark') {
+    document.documentElement.setAttribute('data-theme', 'dark');
+    if (metaTheme) metaTheme.setAttribute('content', '#000000');
+    if (elSettings.toggleDarkMode) elSettings.toggleDarkMode.checked = true;
+  } else {
+    document.documentElement.removeAttribute('data-theme');
+    if (metaTheme) metaTheme.setAttribute('content', '#075E54');
+    if (elSettings.toggleDarkMode) elSettings.toggleDarkMode.checked = false;
+  }
+  if (save) {
+    try {
+      localStorage.setItem('oc_theme', theme);
+    } catch (_) {}
+  }
+}
+
+// Wire dark mode toggle checkbox
+if (elSettings.toggleDarkMode) {
+  elSettings.toggleDarkMode.addEventListener('change', (e) => {
+    const isDark = e.target.checked;
+    applyAppTheme(isDark ? 'dark' : 'light', true);
+    showToast(isDark ? 'Dark mode enabled 🌙' : 'Light mode enabled ☀️', isDark ? '🌙' : '☀️');
+  });
+}
+
+// System color scheme change listener if user has no stored preference
+window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', (e) => {
+  if (!localStorage.getItem('oc_theme')) {
+    applyAppTheme(e.matches ? 'dark' : 'light', false);
+  }
+});
+
+// Sync initial toggle state on page load
+(function initThemeOnLoad() {
+  const current = document.documentElement.getAttribute('data-theme') === 'dark' ? 'dark' : 'light';
+  if (elSettings.toggleDarkMode) {
+    elSettings.toggleDarkMode.checked = current === 'dark';
+  }
+})();
+
+// ===========================================================================
 // PUBLIC FREE OPEN APIS INTEGRATION:
 // 1. Open-Meteo Okanagan College Campus Weather
 // 2. DummyJSON / Free Quotes Daily Student Motivation
@@ -6631,53 +6676,7 @@ if (el.btnShareWeatherChat) {
 }
 
 /**
- * 2. Daily Student Inspiration Quote (Free Quotes API)
- */
-async function loadDailyMotivation() {
-  let quote = null;
-  let author = null;
-
-  try {
-    const res = await fetch('https://dummyjson.com/quotes/random');
-    if (res.ok) {
-      const data = await res.json();
-      if (data && data.quote) {
-        quote = data.quote;
-        author = data.author;
-      }
-    }
-  } catch (_) {}
-
-  if (!quote) {
-    try {
-      const res = await fetch('/api/campus/quote');
-      const data = await res.json();
-      if (data && data.quote) {
-        quote = data.quote;
-        author = data.author;
-      }
-    } catch (_) {}
-  }
-
-  if (quote) {
-    if (el.motivationQuote) el.motivationQuote.textContent = `"${quote}"`;
-    if (el.motivationAuthor) el.motivationAuthor.textContent = `— ${author || 'Anonymous'}`;
-  }
-}
-
-// Quote refresh button
-if (el.btnRefreshQuote) {
-  el.btnRefreshQuote.addEventListener('click', async () => {
-    el.btnRefreshQuote.style.transform = 'rotate(360deg)';
-    await loadDailyMotivation();
-    setTimeout(() => {
-      el.btnRefreshQuote.style.transform = '';
-    }, 400);
-  });
-}
-
-/**
- * 3. DiceBear Creative Avatar Generator (Open API)
+ * 2. DiceBear Creative Avatar Generator (Open API)
  */
 const btnGenerateAvatar = document.getElementById('btn-generate-avatar');
 if (btnGenerateAvatar) {

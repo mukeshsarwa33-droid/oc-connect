@@ -57,6 +57,212 @@
   --warning-orange: #FF9500;
 }
 
+/* ==========================================================================
+   APPLE iOS 18 DARK MODE THEME SYSTEM
+   ========================================================================== */
+[data-theme="dark"] {
+  --ios-bg: #000000;
+  --ios-system-bg: #1C1C1E;
+  --ios-secondary-bg: #2C2C2E;
+  --ios-tertiary-bg: #3A3A3C;
+  --app-bg: #000000;
+  --chat-bg: #000000;
+
+  --bubble-received-bg: #26252A;
+  --bubble-received-text: #FFFFFF;
+  --white-bubble: #26252A;
+
+  --text-dark: #FFFFFF;
+  --text-primary: #FFFFFF;
+  --text-secondary: rgba(235, 235, 245, 0.6);
+  --text-muted: #8E8E93;
+  --text-light: #98989D;
+
+  --ios-separator: rgba(84, 84, 88, 0.45);
+  --ios-border: rgba(84, 84, 88, 0.35);
+  --ios-blur-header: rgba(28, 28, 30, 0.88);
+  --ios-blur-input: rgba(28, 28, 30, 0.94);
+}
+
+[data-theme="dark"] body {
+  background-color: #000000;
+  color: #FFFFFF;
+}
+
+[data-theme="dark"] .screen,
+[data-theme="dark"] .screen-view,
+[data-theme="dark"] #app-viewport {
+  background-color: #000000;
+}
+
+[data-theme="dark"] .app-bar {
+  background-color: rgba(20, 20, 22, 0.85);
+  border-bottom: 0.5px solid rgba(84, 84, 88, 0.4);
+}
+
+[data-theme="dark"] .brand-info h2 {
+  color: #FFFFFF;
+}
+
+[data-theme="dark"] .user-chip {
+  background-color: rgba(255, 255, 255, 0.12);
+  color: #FFFFFF;
+}
+
+[data-theme="dark"] .tabs-bar {
+  background-color: rgba(118, 118, 128, 0.24);
+}
+
+[data-theme="dark"] .tab-btn {
+  color: #8E8E93;
+}
+
+[data-theme="dark"] .tab-btn.active {
+  background: #2C2C2E;
+  color: #FFFFFF;
+}
+
+[data-theme="dark"] .chats-search-section,
+[data-theme="dark"] .friends-search-box {
+  background: #000000;
+}
+
+[data-theme="dark"] .search-box {
+  background: #1C1C1E;
+  border-color: rgba(255, 255, 255, 0.08);
+}
+
+[data-theme="dark"] .search-box input {
+  color: #FFFFFF;
+}
+
+[data-theme="dark"] .inbox-cat-chip {
+  background: #1C1C1E;
+  color: #8E8E93;
+  border-color: rgba(255, 255, 255, 0.08);
+}
+
+[data-theme="dark"] .inbox-cat-chip.active {
+  background: #007AFF;
+  color: #FFFFFF;
+}
+
+[data-theme="dark"] .list-item {
+  border-bottom-color: rgba(84, 84, 88, 0.3);
+}
+
+[data-theme="dark"] .list-item:hover,
+[data-theme="dark"] .list-item:active {
+  background-color: #1C1C1E;
+}
+
+[data-theme="dark"] .item-name {
+  color: #FFFFFF;
+}
+
+[data-theme="dark"] .chat-header {
+  background-color: rgba(20, 20, 22, 0.88);
+  border-bottom-color: rgba(84, 84, 88, 0.4);
+}
+
+[data-theme="dark"] .chat-title-info h3 {
+  color: #FFFFFF;
+}
+
+[data-theme="dark"] .messages-area {
+  background-color: #000000;
+}
+
+[data-theme="dark"] .chat-input-bar {
+  background-color: rgba(20, 20, 22, 0.94);
+  border-top-color: rgba(84, 84, 88, 0.4);
+}
+
+[data-theme="dark"] .chat-input-pill {
+  background: #1C1C1E;
+  border-color: rgba(255, 255, 255, 0.1);
+}
+
+[data-theme="dark"] #message-text-input {
+  color: #FFFFFF;
+}
+
+[data-theme="dark"] .modal-card {
+  background: #1C1C1E;
+}
+
+[data-theme="dark"] .modal-header {
+  border-bottom-color: rgba(84, 84, 88, 0.4);
+}
+
+[data-theme="dark"] .modal-header h3 {
+  color: #FFFFFF;
+}
+
+[data-theme="dark"] .profile-preview-card,
+[data-theme="dark"] .settings-card-group,
+[data-theme="dark"] .profile-hero-card,
+[data-theme="dark"] .profile-info-section,
+[data-theme="dark"] .profile-shared-media-section {
+  background: #2C2C2E;
+  border-color: rgba(255, 255, 255, 0.08);
+}
+
+[data-theme="dark"] .profile-card-name,
+[data-theme="dark"] .settings-field-title,
+[data-theme="dark"] .settings-read-value,
+[data-theme="dark"] .install-box-info strong,
+[data-theme="dark"] .toggle-info strong {
+  color: #FFFFFF;
+}
+
+[data-theme="dark"] .settings-modern-input-box {
+  background: #1C1C1E;
+  border-color: rgba(255, 255, 255, 0.12);
+}
+
+[data-theme="dark"] .settings-clean-input {
+  color: #FFFFFF;
+}
+
+[data-theme="dark"] .settings-row-divider {
+  background: rgba(84, 84, 88, 0.4);
+}
+
+[data-theme="dark"] .settings-install-box {
+  background: #1C1C1E;
+}
+
+[data-theme="dark"] .profile-modal-card {
+  background: #1C1C1E;
+}
+
+[data-theme="dark"] .profile-hero-name-row h2 {
+  color: #FFFFFF;
+}
+
+[data-theme="dark"] .profile-action-btn {
+  background: #2C2C2E;
+  border-color: rgba(255, 255, 255, 0.1);
+}
+
+[data-theme="dark"] .profile-info-row .info-val {
+  color: #FFFFFF;
+}
+
+[data-theme="dark"] .shared-media-header h4 {
+  color: #FFFFFF;
+}
+
+[data-theme="dark"] .media-tabs-bar {
+  background: #1C1C1E;
+}
+
+[data-theme="dark"] .media-tab-btn.active {
+  background: #3A3A3C;
+  color: #FFFFFF;
+}
+
 * {
   box-sizing: border-box;
   margin: 0;
