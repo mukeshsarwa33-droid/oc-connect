@@ -80,7 +80,7 @@ function resolveUsername(identifier) {
   if (!identifier) return null;
   const clean = identifier.trim().toLowerCase().replace(/^@/, '');
   const user = DB.findUser(clean);
-  return user ? user.username : null;
+  return user ? user.username : clean;
 }
 
 // Session Extractor from HTTP Authorization Header or Query Param
@@ -888,7 +888,9 @@ const server = http.createServer(async (req, res) => {
           return res.end(JSON.stringify({ error: 'Invalid user' }));
         }
 
-        const friendNames = DB.getFriends(resolvedMe);
+        const friendsFromTable = DB.getFriends(resolvedMe);
+        const chatPartners = DB.getDirectChatPartners ? DB.getDirectChatPartners(resolvedMe) : [];
+        const friendNames = Array.from(new Set([...friendsFromTable, ...chatPartners]));
         const friendList = friendNames.map(fName => {
           const fData = DB.getUser(fName) || { username: fName, displayName: fName, online: false, avatarColor: getAvatarColor(fName) };
           const chatId = getDeterministicChatId(resolvedMe, fName);

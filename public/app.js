@@ -2568,9 +2568,10 @@ async function fetchAndRenderChatMessages(isInitial = false) {
 
     if (isInitial) {
       el.messagesContainer.innerHTML = '';
+      state.renderedMsgIds.clear();
       if (messages.length === 0) {
         el.messagesContainer.innerHTML = `<div id="chat-empty-hint" style="text-align:center;padding:30px 20px;color:var(--text-light);font-size:13px">
-          🔒 Real-time chat ready! Send a message to start chatting with ${el.chatPartnerTitle.textContent}.
+          🔒 Real-time chat ready! Send a message to start chatting with ${escapeHtml(el.chatPartnerTitle.textContent)}.
         </div>`;
       }
     }
@@ -2628,6 +2629,7 @@ async function fetchAndRenderChatMessages(isInitial = false) {
     const cached = loadFromOfflineCache(offlineKey);
     if (cached && Array.isArray(cached) && isInitial && state.renderedMsgIds.size === 0) {
       el.messagesContainer.innerHTML = '';
+      state.renderedMsgIds.clear();
       cached.forEach(m => {
         const mSender = (m.sender || '').trim().toLowerCase().replace(/^@/, '');
         const isSent = (mSender === state.currentUser.username.toLowerCase());
@@ -2637,6 +2639,45 @@ async function fetchAndRenderChatMessages(isInitial = false) {
       scrollToBottom(false);
     }
   }
+}
+
+// ===========================================================================
+// RICH LINK PREVIEW FETCHER & OPENGRAPH RENDERING
+// ===========================================================================
+const linkPreviewCache = new Map();
+
+async function fetchLinkPreview(url, slotEl) {
+  if (!url || !slotEl) return;
+  if (linkPreviewCache.has(url)) {
+    renderLinkCard(linkPreviewCache.get(url), slotEl, url);
+    return;
+  }
+  try {
+    const res = await fetch(`/api/utils/link-preview?url=${encodeURIComponent(url)}`);
+    if (!res.ok) return;
+    const data = await res.json();
+    if (data && data.success && data.title) {
+      linkPreviewCache.set(url, data);
+      renderLinkCard(data, slotEl, url);
+    }
+  } catch (_) {}
+}
+
+function renderLinkCard(data, slotEl, targetUrl) {
+  if (!slotEl || !data) return;
+  const href = data.url || targetUrl;
+  const imgHtml = data.image ? `<img src="${escapeHtml(data.image)}" class="rich-link-img" alt="Link Preview" loading="lazy" />` : '';
+  const descHtml = data.description ? `<div class="rich-link-desc">${escapeHtml(data.description)}</div>` : '';
+  slotEl.innerHTML = `
+    <a href="${escapeHtml(href)}" target="_blank" rel="noopener noreferrer" class="rich-link-card">
+      ${imgHtml}
+      <div class="rich-link-meta">
+        <div class="rich-link-domain">${escapeHtml(data.domain || '')}</div>
+        <div class="rich-link-title">${escapeHtml(data.title || '')}</div>
+        ${descHtml}
+      </div>
+    </a>
+  `;
 }
 
 // Append Message to UI (WhatsApp & iMessage Hybrid Style)
@@ -8461,45 +8502,6 @@ window.addEventListener('offline', () => {
   }
   showToast('Offline Mode • Saved chats available', '📡');
 });
-
-// ===========================================================================
-// RICH LINK PREVIEW FETCHER & OPENGRAPH RENDERING
-// ===========================================================================
-const linkPreviewCache = new Map();
-
-async function fetchLinkPreview(url, slotEl) {
-  if (!url || !slotEl) return;
-  if (linkPreviewCache.has(url)) {
-    renderLinkCard(linkPreviewCache.get(url), slotEl, url);
-    return;
-  }
-  try {
-    const res = await fetch(`/api/utils/link-preview?url=${encodeURIComponent(url)}`);
-    if (!res.ok) return;
-    const data = await res.json();
-    if (data && data.success && data.title) {
-      linkPreviewCache.set(url, data);
-      renderLinkCard(data, slotEl, url);
-    }
-  } catch (_) {}
-}
-
-function renderLinkCard(data, slotEl, targetUrl) {
-  if (!slotEl || !data) return;
-  const href = data.url || targetUrl;
-  const imgHtml = data.image ? `<img src="${escapeHtml(data.image)}" class="rich-link-img" alt="Link Preview" loading="lazy" />` : '';
-  const descHtml = data.description ? `<div class="rich-link-desc">${escapeHtml(data.description)}</div>` : '';
-  slotEl.innerHTML = `
-    <a href="${escapeHtml(href)}" target="_blank" rel="noopener noreferrer" class="rich-link-card">
-      ${imgHtml}
-      <div class="rich-link-meta">
-        <div class="rich-link-domain">${escapeHtml(data.domain || '')}</div>
-        <div class="rich-link-title">${escapeHtml(data.title || '')}</div>
-        ${descHtml}
-      </div>
-    </a>
-  `;
-}
 
 // ===========================================================================
 // PINNED MESSAGES CONTROLLER

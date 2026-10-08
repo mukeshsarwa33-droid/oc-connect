@@ -775,6 +775,24 @@ const DB = {
     return rows.map(r => r.friend);
   },
 
+  getDirectChatPartners(username) {
+    const clean = username.trim().toLowerCase().replace(/^@/, '');
+    const rows = db.prepare("SELECT DISTINCT chat_id FROM messages WHERE (chat_id LIKE ? OR chat_id LIKE ?) AND chat_id NOT LIKE 'group_%'").all(`${clean}_%`, `%_${clean}`);
+    const partners = new Set();
+    for (const r of rows) {
+      if (r.chat_id) {
+        const parts = r.chat_id.split('_');
+        if (parts.length === 2) {
+          const other = parts[0] === clean ? parts[1] : parts[0];
+          if (other && other !== clean) {
+            partners.add(other);
+          }
+        }
+      }
+    }
+    return Array.from(partners);
+  },
+
   addFriend(userA, userB) {
     const u1 = userA.trim().toLowerCase().replace(/^@/, '');
     const u2 = userB.trim().toLowerCase().replace(/^@/, '');
