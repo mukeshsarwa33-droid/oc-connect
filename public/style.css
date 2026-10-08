@@ -2727,9 +2727,17 @@ body {
    ========================================================================== */
 .settings-modal-card {
   max-height: 88vh;
+  max-width: 520px;
   background: var(--ios-system-bg, #F2F2F7);
   border-radius: 28px 28px 0 0;
   box-shadow: var(--sheet-shadow);
+}
+
+@media (min-width: 540px) {
+  .settings-modal-card {
+    border-radius: 24px;
+    max-height: 85vh;
+  }
 }
 
 .settings-modal-body {
