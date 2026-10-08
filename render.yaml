@@ -1,0 +1,12 @@
+services:
+  - type: web
+    name: oc-connect
+    runtime: node
+    plan: free
+    buildCommand: ""
+    startCommand: "node server.js"
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: 8080
