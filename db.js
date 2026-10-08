@@ -229,6 +229,7 @@ const stmts = {
   `),
   updateOnline: db.prepare('UPDATE users SET online = ?, last_seen = ? WHERE username = ?'),
   updateDisplayName: db.prepare('UPDATE users SET display_name = ? WHERE username = ?'),
+  updateMajor: db.prepare('UPDATE users SET major = ? WHERE username = ?'),
   updateAvatar: db.prepare('UPDATE users SET avatar_image = ? WHERE username = ?'),
   
   // Friends
@@ -669,6 +670,11 @@ const DB = {
   setUserDisplayName(username, displayName) {
     const clean = username.trim().toLowerCase().replace(/^@/, '');
     stmts.updateDisplayName.run(displayName, clean);
+  },
+
+  setUserMajor(username, major) {
+    const clean = username.trim().toLowerCase().replace(/^@/, '');
+    stmts.updateMajor.run(major, clean);
   },
 
   setUserAvatar(username, avatarImage) {

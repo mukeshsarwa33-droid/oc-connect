@@ -2665,6 +2665,43 @@ const server = http.createServer(async (req, res) => {
         }));
       }
 
+      // 24b. Student Profile Update (Display Name & Major)
+      if (pathname === '/api/users/profile' && req.method === 'POST') {
+        const { username, displayName, major } = await parseJsonBody(req);
+        const resolved = resolveUsername(username);
+
+        if (!resolved) {
+          res.writeHead(404);
+          return res.end(JSON.stringify({ error: 'User not found' }));
+        }
+
+        const user = DB.getUser(resolved);
+        const cleanName = displayName ? displayName.trim().slice(0, 30) : (user ? user.displayName : resolved);
+        if (displayName !== undefined && cleanName) {
+          DB.setUserDisplayName(resolved, cleanName);
+        }
+
+        const cleanMajor = major ? major.trim().slice(0, 50) : (user ? user.major : 'Okanagan College');
+        if (major !== undefined && cleanMajor) {
+          DB.setUserMajor(resolved, cleanMajor);
+        }
+
+        const updatedUser = DB.getUser(resolved);
+
+        broadcastToAll('directory_updated', {
+          updatedUser: {
+            username: resolved,
+            displayName: updatedUser.displayName,
+            major: updatedUser.major
+          }
+        });
+
+        return res.end(JSON.stringify({
+          success: true,
+          user: updatedUser
+        }));
+      }
+
       // 25. SSE Real-Time Stream Endpoint
       if (pathname === '/api/stream' && req.method === 'GET') {
         const username = (parsedUrl.searchParams.get('username') || '').trim().toLowerCase();

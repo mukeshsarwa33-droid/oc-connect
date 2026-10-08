@@ -1126,6 +1126,7 @@ window.addEventListener('DOMContentLoaded', async () => {
           if (data && data.user) {
             state.currentUser = data.user;
             localStorage.setItem('oc_connect_user', JSON.stringify(data.user));
+            updateAllMyAvatarInstances();
           }
         }).catch(() => {
           // Offline / Tunnel reconnection: keep smooth offline session active
@@ -6122,8 +6123,8 @@ const elSettings = {
   btnSaveDisplayName: document.getElementById('btn-save-display-name'),
   usernameInput: document.getElementById('settings-username-input'),
   btnSaveUsername: document.getElementById('btn-save-username-change'),
-  campusVal: document.getElementById('settings-campus-val'),
-  majorVal: document.getElementById('settings-major-val'),
+  majorInput: document.getElementById('settings-major-input'),
+  btnSaveMajor: document.getElementById('btn-save-major'),
   ocidVal: document.getElementById('settings-ocid-val'),
   btnLogout: document.getElementById('btn-settings-logout'),
   avatarFileInput: document.getElementById('avatar-file-input'),
@@ -6139,11 +6140,10 @@ function openSettingsModal() {
   if (elSettings.cardHandle) elSettings.cardHandle.textContent = `@${u.username}`;
 
   // Pre-fill fields
-  if (elSettings.displayNameInput) elSettings.displayNameInput.value = u.displayName || '';
+  if (elSettings.displayNameInput) elSettings.displayNameInput.value = u.displayName || u.username || '';
   if (elSettings.usernameInput) elSettings.usernameInput.value = '';
-  if (elSettings.majorVal) elSettings.majorVal.textContent = u.major || 'Okanagan College';
+  if (elSettings.majorInput) elSettings.majorInput.value = u.major || 'Okanagan College';
   if (elSettings.ocidVal) elSettings.ocidVal.textContent = u.ocId ? `${u.ocId}` : '••••••••';
-  if (elSettings.campusVal) elSettings.campusVal.textContent = 'Kelowna Campus (KLO)';
 
   // Render avatar
   renderAvatar(
@@ -6233,15 +6233,45 @@ if (userChipBtn) {
   userChipBtn.addEventListener('click', openSettingsModal);
 }
 
-// Close button
+// Close button (Done) — auto-saves any un-submitted edits in input fields
 if (elSettings.btnClose) {
-  elSettings.btnClose.addEventListener('click', () => closeModal(elSettings.modal));
+  elSettings.btnClose.addEventListener('click', async () => {
+    // If user edited display name without pressing save, auto-save now
+    if (elSettings.displayNameInput && state.currentUser) {
+      const currentVal = elSettings.displayNameInput.value.trim();
+      if (currentVal && currentVal !== state.currentUser.displayName) {
+        await saveDisplayNameAction();
+      }
+    }
+    // If user edited program without pressing save, auto-save now
+    if (elSettings.majorInput && state.currentUser) {
+      const currentMajor = elSettings.majorInput.value.trim();
+      if (currentMajor && currentMajor !== state.currentUser.major) {
+        await saveMajorAction();
+      }
+    }
+    closeModal(elSettings.modal);
+  });
 }
 
-// Close on backdrop tap
+// Close on backdrop tap — auto-saves edits
 if (elSettings.modal) {
-  elSettings.modal.addEventListener('click', (e) => {
-    if (e.target === elSettings.modal) closeModal(elSettings.modal);
+  elSettings.modal.addEventListener('click', async (e) => {
+    if (e.target === elSettings.modal) {
+      if (elSettings.displayNameInput && state.currentUser) {
+        const currentVal = elSettings.displayNameInput.value.trim();
+        if (currentVal && currentVal !== state.currentUser.displayName) {
+          await saveDisplayNameAction();
+        }
+      }
+      if (elSettings.majorInput && state.currentUser) {
+        const currentMajor = elSettings.majorInput.value.trim();
+        if (currentMajor && currentMajor !== state.currentUser.major) {
+          await saveMajorAction();
+        }
+      }
+      closeModal(elSettings.modal);
+    }
   });
 }
 
@@ -6333,108 +6363,191 @@ if (elSettings.btnRemoveAvatar) {
   });
 }
 
-// Save display name to server
-if (elSettings.btnSaveDisplayName) {
-  elSettings.btnSaveDisplayName.addEventListener('click', async () => {
-    const newName = (elSettings.displayNameInput.value || '').trim();
-    if (!newName) { showToast('Display name cannot be empty.', '⚠️'); return; }
-    if (newName === state.currentUser.displayName) {
-      showToast('That is already your display name.', 'ℹ️');
-      return;
-    }
-    
+// Helper to save display name
+async function saveDisplayNameAction() {
+  if (!state.currentUser || !elSettings.displayNameInput) return;
+  const newName = (elSettings.displayNameInput.value || '').trim();
+  if (!newName) { showToast('Display name cannot be empty.', '⚠️'); return; }
+  if (newName === state.currentUser.displayName) return;
+
+  if (elSettings.btnSaveDisplayName) {
     elSettings.btnSaveDisplayName.disabled = true;
     elSettings.btnSaveDisplayName.textContent = 'Saving...';
-    try {
-      const res = await fetch('/api/users/display-name', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          username: state.currentUser.username,
-          displayName: newName
-        })
-      });
-      const data = await res.json();
-      if (!res.ok) {
-        showToast(data.error || 'Failed to update name.', '❌');
-        return;
-      }
+  }
 
-      state.currentUser.displayName = newName;
-      localStorage.setItem('oc_connect_user', JSON.stringify(state.currentUser));
-      updateAllMyAvatarInstances();
-      if (elSettings.cardName) elSettings.cardName.textContent = newName;
-      if (el.currentUserHandle) el.currentUserHandle.textContent = `@${state.currentUser.username}`;
-      showToast(`Display name updated to "${newName}"! ✅`, '✏️');
-    } catch (err) {
-      showToast('Error saving display name: ' + err.message, '❌');
-    } finally {
+  try {
+    const res = await fetch('/api/users/profile', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        username: state.currentUser.username,
+        displayName: newName
+      })
+    });
+    const data = await res.json();
+    if (!res.ok) {
+      showToast(data.error || 'Failed to update name.', '❌');
+      return;
+    }
+
+    state.currentUser.displayName = newName;
+    localStorage.setItem('oc_connect_user', JSON.stringify(state.currentUser));
+    updateAllMyAvatarInstances();
+    if (elSettings.cardName) elSettings.cardName.textContent = newName;
+    if (el.currentUserHandle) el.currentUserHandle.textContent = `@${state.currentUser.username}`;
+    showToast(`Display name saved: "${newName}" ✅`, '✏️');
+  } catch (err) {
+    showToast('Error saving display name: ' + err.message, '❌');
+  } finally {
+    if (elSettings.btnSaveDisplayName) {
       elSettings.btnSaveDisplayName.disabled = false;
       elSettings.btnSaveDisplayName.textContent = 'Save';
+    }
+  }
+}
+
+// Helper to save program / major
+async function saveMajorAction() {
+  if (!state.currentUser || !elSettings.majorInput) return;
+  const newMajor = (elSettings.majorInput.value || '').trim();
+  if (!newMajor) { showToast('Program cannot be empty.', '⚠️'); return; }
+  if (newMajor === state.currentUser.major) return;
+
+  if (elSettings.btnSaveMajor) {
+    elSettings.btnSaveMajor.disabled = true;
+    elSettings.btnSaveMajor.textContent = 'Saving...';
+  }
+
+  try {
+    const res = await fetch('/api/users/profile', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        username: state.currentUser.username,
+        major: newMajor
+      })
+    });
+    const data = await res.json();
+    if (!res.ok) {
+      showToast(data.error || 'Failed to update program.', '❌');
+      return;
+    }
+
+    state.currentUser.major = newMajor;
+    localStorage.setItem('oc_connect_user', JSON.stringify(state.currentUser));
+    showToast(`Program updated: "${newMajor}" ✅`, '🎓');
+  } catch (err) {
+    showToast('Error saving program: ' + err.message, '❌');
+  } finally {
+    if (elSettings.btnSaveMajor) {
+      elSettings.btnSaveMajor.disabled = false;
+      elSettings.btnSaveMajor.textContent = 'Save';
+    }
+  }
+}
+
+// Save display name button & Enter key
+if (elSettings.btnSaveDisplayName) {
+  elSettings.btnSaveDisplayName.addEventListener('click', saveDisplayNameAction);
+}
+if (elSettings.displayNameInput) {
+  elSettings.displayNameInput.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      saveDisplayNameAction();
     }
   });
 }
 
-// Change username
-if (elSettings.btnSaveUsername) {
-  elSettings.btnSaveUsername.addEventListener('click', async () => {
-    const newUsername = (elSettings.usernameInput.value || '').trim().toLowerCase().replace(/^@/, '');
-    if (!newUsername) { showToast('Please enter a new username.', '⚠️'); return; }
-    if (newUsername === state.currentUser.username) {
-      showToast('That is already your username.', 'ℹ️'); return;
+// Save program/major button & Enter key
+if (elSettings.btnSaveMajor) {
+  elSettings.btnSaveMajor.addEventListener('click', saveMajorAction);
+}
+if (elSettings.majorInput) {
+  elSettings.majorInput.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      saveMajorAction();
     }
-    if (!/^[a-z0-9_]+$/.test(newUsername)) {
-      showToast('Username may only contain letters, numbers, and underscores.', '⚠️'); return;
-    }
-    if (newUsername.length < 3 || newUsername.length > 20) {
-      showToast('Username must be 3–20 characters.', '⚠️'); return;
-    }
-    if (!confirm(`Change your username from @${state.currentUser.username} to @${newUsername}? Your chat history and friends list will be migrated.`)) return;
+  });
+}
 
+// Helper to change username
+async function saveUsernameAction() {
+  if (!state.currentUser || !elSettings.usernameInput) return;
+  const newUsername = (elSettings.usernameInput.value || '').trim().toLowerCase().replace(/^@/, '');
+  if (!newUsername) { showToast('Please enter a new username.', '⚠️'); return; }
+  if (newUsername === state.currentUser.username) {
+    showToast('That is already your username.', 'ℹ️'); return;
+  }
+  if (!/^[a-z0-9_]+$/.test(newUsername)) {
+    showToast('Username may only contain letters, numbers, and underscores.', '⚠️'); return;
+  }
+  if (newUsername.length < 3 || newUsername.length > 20) {
+    showToast('Username must be 3–20 characters.', '⚠️'); return;
+  }
+  if (!confirm(`Change your username from @${state.currentUser.username} to @${newUsername}? Your chat history and friends list will be migrated.`)) return;
+
+  if (elSettings.btnSaveUsername) {
     elSettings.btnSaveUsername.textContent = 'Changing...';
     elSettings.btnSaveUsername.disabled = true;
+  }
 
-    try {
-      const res = await fetch('/api/auth/change-username', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          currentUsername: state.currentUser.username,
-          newUsername: newUsername
-        })
-      });
-      const data = await res.json();
-      if (!res.ok) {
-        showToast(data.error || 'Could not change username.', '❌');
-        return;
-      }
+  try {
+    const res = await fetch('/api/auth/change-username', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        currentUsername: state.currentUser.username,
+        newUsername: newUsername
+      })
+    });
+    const data = await res.json();
+    if (!res.ok) {
+      showToast(data.error || 'Could not change username.', '❌');
+      return;
+    }
 
-      // Update state and localStorage with new user object
-      state.currentUser = data.user;
-      localStorage.setItem('oc_connect_user', JSON.stringify(data.user));
+    // Update state and localStorage with new user object
+    state.currentUser = data.user;
+    localStorage.setItem('oc_connect_user', JSON.stringify(data.user));
 
-      // Update UI
-      if (el.currentUserHandle) el.currentUserHandle.textContent = `@${data.user.username}`;
-      if (elSettings.cardHandle) elSettings.cardHandle.textContent = `@${data.user.username}`;
-      if (elSettings.cardName) elSettings.cardName.textContent = data.user.displayName || data.user.username;
-      updateAllMyAvatarInstances();
+    // Update UI
+    if (el.currentUserHandle) el.currentUserHandle.textContent = `@${data.user.username}`;
+    if (elSettings.cardHandle) elSettings.cardHandle.textContent = `@${data.user.username}`;
+    if (elSettings.cardName) elSettings.cardName.textContent = data.user.displayName || data.user.username;
+    updateAllMyAvatarInstances();
 
-      // Reconnect SSE with new username
-      connectEventSource();
+    // Reconnect SSE with new username
+    connectEventSource();
 
-      // Reload friends and directory
-      loadFriendsList();
-      loadCampusDirectory();
-      loadRecentChats();
+    // Reload friends and directory
+    loadFriendsList();
+    loadCampusDirectory();
+    loadRecentChats();
 
-      elSettings.usernameInput.value = '';
-      closeModal(elSettings.modal);
-      showToast(`Username changed to @${data.user.username}! ✅`, '🎉');
-    } catch (err) {
-      showToast('Error changing username: ' + err.message, '❌');
-    } finally {
+    elSettings.usernameInput.value = '';
+    closeModal(elSettings.modal);
+    showToast(`Username changed to @${data.user.username}! ✅`, '🎉');
+  } catch (err) {
+    showToast('Error changing username: ' + err.message, '❌');
+  } finally {
+    if (elSettings.btnSaveUsername) {
       elSettings.btnSaveUsername.textContent = 'Change';
       elSettings.btnSaveUsername.disabled = false;
+    }
+  }
+}
+
+// Change username button & Enter key
+if (elSettings.btnSaveUsername) {
+  elSettings.btnSaveUsername.addEventListener('click', saveUsernameAction);
+}
+if (elSettings.usernameInput) {
+  elSettings.usernameInput.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      saveUsernameAction();
     }
   });
 }
