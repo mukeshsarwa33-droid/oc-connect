@@ -1245,6 +1245,123 @@ const server = http.createServer(async (req, res) => {
         return res.end(JSON.stringify({ success: true, reactions: updatedReactions }));
       }
 
+      // 11a-2. Pin / Unpin Message
+      if (pathname === '/api/messages/pin' && req.method === 'POST') {
+        const { messageId, isPinned } = await parseJsonBody(req);
+        if (!messageId) {
+          res.writeHead(400);
+          return res.end(JSON.stringify({ error: 'messageId is required' }));
+        }
+
+        const msg = DB.getMessageById(messageId);
+        if (!msg) {
+          res.writeHead(404);
+          return res.end(JSON.stringify({ error: 'Message not found' }));
+        }
+
+        const updated = DB.setMessagePinned(messageId, Boolean(isPinned));
+        const payload = {
+          messageId,
+          isPinned: Boolean(isPinned),
+          chatId: msg.chatId,
+          channel: msg.channel,
+          message: updated
+        };
+
+        if (msg.channel) {
+          broadcastToAll('message_pinned_updated', payload);
+        } else if (msg.chatId && msg.chatId.startsWith('group_')) {
+          const groupId = msg.chatId.replace(/^group_/, '');
+          broadcastToGroup(groupId, 'message_pinned_updated', payload);
+        } else if (msg.chatId) {
+          const parts = msg.chatId.split('_');
+          for (const u of parts) {
+            broadcastToUser(u, 'message_pinned_updated', payload);
+          }
+        }
+
+        return res.end(JSON.stringify({ success: true, message: updated }));
+      }
+
+      // 11a-3. Get Pinned Messages
+      if (pathname === '/api/messages/pinned' && req.method === 'GET') {
+        const target = (parsedUrl.searchParams.get('target') || '').trim();
+        const me = (parsedUrl.searchParams.get('me') || '').trim();
+        const isChannel = parsedUrl.searchParams.get('isChannel') === 'true';
+        if (!target) {
+          return res.end(JSON.stringify({ success: true, pinned: [] }));
+        }
+        let resolved = target;
+        if (!isChannel && !target.startsWith('group_') && me) {
+          resolved = getDeterministicChatId(me, target);
+        }
+        const pinned = DB.getPinnedMessages(resolved, isChannel);
+        return res.end(JSON.stringify({ success: true, pinned }));
+      }
+
+      // 11a-4. Get Chat Media & Attachments
+      if (pathname === '/api/messages/media' && req.method === 'GET') {
+        const target = (parsedUrl.searchParams.get('target') || '').trim();
+        const me = (parsedUrl.searchParams.get('me') || '').trim();
+        const isChannel = parsedUrl.searchParams.get('isChannel') === 'true';
+        if (!target) {
+          return res.end(JSON.stringify({ success: true, media: { photos: [], docs: [], voice: [] } }));
+        }
+        let resolved = target;
+        if (!isChannel && !target.startsWith('group_') && me) {
+          resolved = getDeterministicChatId(me, target);
+        }
+        const media = DB.getChatMedia(resolved, isChannel);
+        return res.end(JSON.stringify({ success: true, media }));
+      }
+
+      // 11a-5. Link Preview Scraper (OpenGraph Cards)
+      if (pathname === '/api/utils/link-preview' && req.method === 'GET') {
+        const targetUrl = parsedUrl.searchParams.get('url') || '';
+        if (!targetUrl || (!targetUrl.startsWith('http://') && !targetUrl.startsWith('https://'))) {
+          res.writeHead(400);
+          return res.end(JSON.stringify({ error: 'Valid HTTP/HTTPS url required' }));
+        }
+
+        try {
+          const controller = new AbortController();
+          const timeoutId = setTimeout(() => controller.abort(), 3500);
+          const fetchRes = await fetch(targetUrl, {
+            signal: controller.signal,
+            headers: { 'User-Agent': 'Mozilla/5.0 (compatible; OCConnectBot/1.0)' }
+          });
+          clearTimeout(timeoutId);
+
+          if (!fetchRes.ok) {
+            return res.end(JSON.stringify({ success: false, url: targetUrl }));
+          }
+
+          const html = await fetchRes.text();
+          const titleMatch = html.match(/<meta property=["']og:title["'] content=["'](.*?)["']/i) ||
+                             html.match(/<title>(.*?)<\/title>/i);
+          const descMatch = html.match(/<meta property=["']og:description["'] content=["'](.*?)["']/i) ||
+                            html.match(/<meta name=["']description["'] content=["'](.*?)["']/i);
+          const imageMatch = html.match(/<meta property=["']og:image["'] content=["'](.*?)["']/i);
+
+          const parsedObj = new URL(targetUrl);
+          let imageUrl = imageMatch ? imageMatch[1] : null;
+          if (imageUrl && !imageUrl.startsWith('http')) {
+            imageUrl = new URL(imageUrl, targetUrl).href;
+          }
+
+          return res.end(JSON.stringify({
+            success: true,
+            url: targetUrl,
+            domain: parsedObj.hostname,
+            title: titleMatch ? titleMatch[1].slice(0, 100) : parsedObj.hostname,
+            description: descMatch ? descMatch[1].slice(0, 160) : '',
+            image: imageUrl
+          }));
+        } catch (_) {
+          return res.end(JSON.stringify({ success: false, url: targetUrl }));
+        }
+      }
+
       // ==========================================
       // 11b. WHATSAPP-STYLE GROUPS API ENDPOINTS
       // ==========================================

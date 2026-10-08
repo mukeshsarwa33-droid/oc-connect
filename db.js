@@ -206,6 +206,7 @@ db.exec(`
 try { db.exec("ALTER TABLE users ADD COLUMN email TEXT;"); } catch(_) {}
 try { db.exec("ALTER TABLE users ADD COLUMN phone TEXT;"); } catch(_) {}
 try { db.exec("ALTER TABLE messages ADD COLUMN reply_to_json TEXT;"); } catch(_) {}
+try { db.exec("ALTER TABLE messages ADD COLUMN is_pinned INTEGER DEFAULT 0;"); } catch(_) {}
 
 // Prepared Statements for Sub-Millisecond Speed
 const stmts = {
@@ -300,6 +301,9 @@ const stmts = {
     UPDATE messages SET status = 'read' WHERE chat_id = ? AND sender = ? AND status != 'read'
   `),
   getMessageById: db.prepare('SELECT * FROM messages WHERE id = ? LIMIT 1'),
+  setMessagePinned: db.prepare('UPDATE messages SET is_pinned = ? WHERE id = ?'),
+  getPinnedMessagesByChat: db.prepare('SELECT * FROM messages WHERE chat_id = ? AND is_pinned = 1 ORDER BY timestamp DESC LIMIT 10'),
+  getPinnedMessagesByChannel: db.prepare('SELECT * FROM messages WHERE channel = ? AND is_pinned = 1 ORDER BY timestamp DESC LIMIT 10'),
 
   // Reactions System (Google Messages / WhatsApp style)
   getReaction: db.prepare('SELECT emoji FROM message_reactions WHERE message_id = ? AND username = ?'),
@@ -460,6 +464,7 @@ function formatMessageRecord(row, reactionsMap = null) {
     call: row.call_json ? JSON.parse(row.call_json) : null,
     replyTo: row.reply_to_json ? JSON.parse(row.reply_to_json) : null,
     reactions: reactions || {},
+    isPinned: Boolean(row.is_pinned),
     status: row.status || 'sent',
     timestamp: row.timestamp
   };
@@ -964,6 +969,52 @@ const DB = {
   getMessageById(id) {
     const row = stmts.getMessageById.get(id);
     return formatMessageRecord(row);
+  },
+
+  setMessagePinned(id, isPinned) {
+    stmts.setMessagePinned.run(isPinned ? 1 : 0, id);
+    return this.getMessageById(id);
+  },
+
+  getPinnedMessages(chatIdOrChannel, isChannel = false) {
+    const rows = isChannel
+      ? stmts.getPinnedMessagesByChannel.all(chatIdOrChannel.toLowerCase())
+      : stmts.getPinnedMessagesByChat.all(chatIdOrChannel);
+    return rows.map(r => formatMessageRecord(r));
+  },
+
+  getChatMedia(chatIdOrChannel, isChannel = false) {
+    const query = isChannel
+      ? db.prepare("SELECT * FROM messages WHERE channel = ? AND (image IS NOT NULL OR file_json IS NOT NULL OR voice_json IS NOT NULL) ORDER BY timestamp DESC LIMIT 200")
+      : db.prepare("SELECT * FROM messages WHERE (chat_id = ? OR chat_id LIKE ?) AND (image IS NOT NULL OR file_json IS NOT NULL OR voice_json IS NOT NULL) ORDER BY timestamp DESC LIMIT 200");
+    const rows = isChannel
+      ? query.all(chatIdOrChannel.toLowerCase())
+      : query.all(chatIdOrChannel, `%${chatIdOrChannel}%`);
+    const messages = rows.map(r => formatMessageRecord(r));
+
+    const photos = [];
+    const docs = [];
+    const voice = [];
+
+    for (const m of messages) {
+      if (m.image) {
+        photos.push({ id: m.id, src: m.image, timestamp: m.timestamp, sender: m.sender });
+      }
+      if (m.file) {
+        const f = m.file;
+        const isImg = (f.type && f.type.startsWith('image/')) || /\.(png|jpe?g|gif|webp)$/i.test(f.name || '');
+        if (isImg) {
+          photos.push({ id: m.id, src: f.data, timestamp: m.timestamp, sender: m.sender });
+        } else {
+          docs.push({ id: m.id, name: f.name || 'Document', type: f.type, size: f.size || 0, data: f.data, timestamp: m.timestamp, sender: m.sender });
+        }
+      }
+      if (m.voice) {
+        voice.push({ id: m.id, duration: m.voice.duration || 0, data: m.voice.data, timestamp: m.timestamp, sender: m.sender });
+      }
+    }
+
+    return { photos, docs, voice };
   },
 
   searchStudents(me, query, limit = 50) {

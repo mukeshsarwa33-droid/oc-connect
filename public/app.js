@@ -236,6 +236,18 @@ const el = {
   btnBackToHome: document.getElementById('btn-back-to-home'),
   btnStartCall: document.getElementById('btn-start-call'),
   btnCallSecurity: document.getElementById('btn-call-security'),
+  btnToggleChatSearch: document.getElementById('btn-toggle-chat-search'),
+  btnChatMediaHub: document.getElementById('btn-chat-media-hub'),
+  inChatSearchBar: document.getElementById('in-chat-search-bar'),
+  inChatSearchInput: document.getElementById('in-chat-search-input'),
+  chatSearchCount: document.getElementById('chat-search-count'),
+  btnChatSearchPrev: document.getElementById('btn-chat-search-prev'),
+  btnChatSearchNext: document.getElementById('btn-chat-search-next'),
+  btnCloseChatSearch: document.getElementById('btn-close-chat-search'),
+  pinnedMessagesBanner: document.getElementById('pinned-messages-banner'),
+  pinnedBannerSender: document.getElementById('pinned-banner-sender'),
+  pinnedBannerText: document.getElementById('pinned-banner-text'),
+  btnUnpinCurrentMsg: document.getElementById('btn-unpin-current-msg'),
   // Modals & Floating Buttons
   fabAddFriend: document.getElementById('fab-add-friend'),
   fabSos: document.getElementById('fab-sos'),
@@ -373,6 +385,7 @@ const el = {
   // Notifications & Alerts Settings
   togglePushNotifications: document.getElementById('toggle-push-notifications'),
   toggleNotificationSound: document.getElementById('toggle-notification-sound'),
+  toggleHapticVibration: document.getElementById('toggle-haptic-vibration'),
   toggleMessagePreviews: document.getElementById('toggle-message-previews'),
   settingsBlockedList: document.getElementById('settings-blocked-list'),
   settingsBlockedCount: document.getElementById('settings-blocked-count'),
@@ -408,7 +421,9 @@ const el = {
   noStarredPlaceholder: document.getElementById('no-starred-placeholder'),
   modalViewScheduled: document.getElementById('modal-view-scheduled'),
   btnCloseViewScheduled: document.getElementById('btn-close-view-scheduled'),
-  viewScheduledList: document.getElementById('view-scheduled-list')
+  viewScheduledList: document.getElementById('view-scheduled-list'),
+  modalChatMediaHub: document.getElementById('modal-chat-media-hub'),
+  btnCloseMediaHub: document.getElementById('btn-close-media-hub')
 };
 
 // Web Audio Synthesizer for Authentic WhatsApp Sounds
@@ -1531,14 +1546,25 @@ function getNotificationPrefs() {
   return {
     push: localStorage.getItem('oc_notify_push') !== 'false',
     sound: localStorage.getItem('oc_notify_sound') !== 'false',
+    haptic: localStorage.getItem('oc_notify_haptic') !== 'false',
     preview: localStorage.getItem('oc_notify_preview') !== 'false'
   };
+}
+
+function triggerHapticFeedback(pattern = [15]) {
+  try {
+    const prefs = getNotificationPrefs();
+    if (prefs.haptic && 'vibrate' in navigator) {
+      navigator.vibrate(pattern);
+    }
+  } catch (_) {}
 }
 
 function initNotificationSettings() {
   const prefs = getNotificationPrefs();
   if (el.togglePushNotifications) el.togglePushNotifications.checked = prefs.push;
   if (el.toggleNotificationSound) el.toggleNotificationSound.checked = prefs.sound;
+  if (el.toggleHapticVibration) el.toggleHapticVibration.checked = prefs.haptic;
   if (el.toggleMessagePreviews) el.toggleMessagePreviews.checked = prefs.preview;
 }
 
@@ -1565,6 +1591,13 @@ if (el.toggleNotificationSound) {
   el.toggleNotificationSound.addEventListener('change', (e) => {
     localStorage.setItem('oc_notify_sound', e.target.checked ? 'true' : 'false');
     if (e.target.checked) playReceivedSound();
+  });
+}
+
+if (el.toggleHapticVibration) {
+  el.toggleHapticVibration.addEventListener('change', (e) => {
+    localStorage.setItem('oc_notify_haptic', e.target.checked ? 'true' : 'false');
+    if (e.target.checked) triggerHapticFeedback([25]);
   });
 }
 
@@ -2304,9 +2337,14 @@ document.querySelectorAll('.channel-card').forEach(card => {
     const titles = {
       'kelowna-general': '#Kelowna-General',
       'study-lounge': '#Study-Lounge',
-      'campus-safety': '#Campus-Safety'
+      'campus-safety': '#Campus-Safety',
+      'cosc-study-room': '#COSC-Computer-Science',
+      'buad-study-room': '#BUAD-Business-Admin',
+      'math-study-room': '#MATH-Help-Lounge',
+      'nursing-study-room': '#NURS-Health-Sciences',
+      'engr-trades-room': '#ENGR-Trades-Tech'
     };
-    openChat(chanKey, titles[chanKey] || chanKey, true, true);
+    openChat(chanKey, titles[chanKey] || `#${chanKey}`, true, true);
   });
 });
 
@@ -2387,6 +2425,7 @@ async function openChat(target, title, isChannel = false, isOnline = false) {
 
   // Initial load
   await fetchAndRenderChatMessages(true);
+  loadPinnedMessages();
 
   // Active sync loop: fetches any new messages every 700ms while chat screen is open (instant feel!)
   state.chatSyncInterval = setInterval(() => {
@@ -2452,6 +2491,7 @@ async function openGroupChat(groupId, groupName, avatarColor, avatarImage) {
   }
 
   await fetchAndRenderChatMessages(true);
+  loadPinnedMessages();
 
   state.chatSyncInterval = setInterval(() => {
     if (!el.chatScreen.classList.contains('hidden') && state.isGroup && state.currentGroupId === groupId) {
@@ -2690,6 +2730,7 @@ function appendMessageToChat(msg, isSent) {
             <span>🎤 Voice Note</span>
           </div>
         </div>
+        <button class="voice-speed-pill" type="button" title="Playback Speed">1x</button>
         <audio src="${msg.voice.data}" preload="metadata" class="hidden"></audio>
       </div>
     `;
@@ -2863,6 +2904,16 @@ function appendMessageToChat(msg, isSent) {
     `;
   }
 
+  let linkPreviewHtml = '';
+  let detectedUrl = null;
+  if (msg.text) {
+    const urlMatch = msg.text.match(/https?:\/\/[^\s]+/i);
+    if (urlMatch) {
+      detectedUrl = urlMatch[0];
+      linkPreviewHtml = `<div class="message-link-preview-slot" data-url="${escapeHtml(detectedUrl)}"></div>`;
+    }
+  }
+
   bubble.innerHTML = `
     ${senderNameHtml}
     ${replyToHtml}
@@ -2872,9 +2923,17 @@ function appendMessageToChat(msg, isSent) {
     ${voiceHtml}
     ${studyCardHtml}
     ${textHtml}
+    ${linkPreviewHtml}
     ${otpChipHtml}
     ${statusHtml}
   `;
+
+  if (detectedUrl) {
+    const slot = bubble.querySelector('.message-link-preview-slot');
+    if (slot) {
+      fetchLinkPreview(detectedUrl, slot);
+    }
+  }
 
   // Attach Quoted Message Jump Click
   const quoteEl = bubble.querySelector('.message-quoted-preview');
@@ -3012,6 +3071,21 @@ function appendMessageToChat(msg, isSent) {
           audioEl.currentTime = newPct * audioEl.duration;
           progressFill.style.width = (newPct * 100) + '%';
           durationLabel.textContent = formatAudioDuration(audioEl.currentTime);
+        });
+      }
+
+      // Voice note playback speed toggle (1x -> 1.5x -> 2x)
+      const speedBtn = bubble.querySelector('.voice-speed-pill');
+      if (speedBtn) {
+        speedBtn.addEventListener('click', (e) => {
+          e.stopPropagation();
+          const speeds = [1, 1.5, 2];
+          const curRate = audioEl.playbackRate || 1;
+          const nextIdx = (speeds.indexOf(curRate) + 1) % speeds.length;
+          const nextRate = speeds[nextIdx >= 0 ? nextIdx : 0];
+          audioEl.playbackRate = nextRate;
+          speedBtn.textContent = `${nextRate}x`;
+          triggerHapticFeedback([12]);
         });
       }
     }
@@ -3201,6 +3275,18 @@ if (popoverBtnCopy) {
       } else {
         showToast('Attachment / Media message', 'ℹ️');
       }
+    }
+    hideReactionPopover();
+  });
+}
+
+const popoverBtnPin = document.getElementById('popover-btn-pin');
+if (popoverBtnPin) {
+  popoverBtnPin.addEventListener('click', async (e) => {
+    e.stopPropagation();
+    if (activeReactionMsg) {
+      const isCurrentlyPinned = state.pinnedMessages && state.pinnedMessages.some(m => m.id === activeReactionMsg.id);
+      await togglePinMessage(activeReactionMsg.id, !isCurrentlyPinned);
     }
     hideReactionPopover();
   });
@@ -8375,3 +8461,401 @@ window.addEventListener('offline', () => {
   }
   showToast('Offline Mode • Saved chats available', '📡');
 });
+
+// ===========================================================================
+// RICH LINK PREVIEW FETCHER & OPENGRAPH RENDERING
+// ===========================================================================
+const linkPreviewCache = new Map();
+
+async function fetchLinkPreview(url, slotEl) {
+  if (!url || !slotEl) return;
+  if (linkPreviewCache.has(url)) {
+    renderLinkCard(linkPreviewCache.get(url), slotEl, url);
+    return;
+  }
+  try {
+    const res = await fetch(`/api/utils/link-preview?url=${encodeURIComponent(url)}`);
+    if (!res.ok) return;
+    const data = await res.json();
+    if (data && data.success && data.title) {
+      linkPreviewCache.set(url, data);
+      renderLinkCard(data, slotEl, url);
+    }
+  } catch (_) {}
+}
+
+function renderLinkCard(data, slotEl, targetUrl) {
+  if (!slotEl || !data) return;
+  const href = data.url || targetUrl;
+  const imgHtml = data.image ? `<img src="${escapeHtml(data.image)}" class="rich-link-img" alt="Link Preview" loading="lazy" />` : '';
+  const descHtml = data.description ? `<div class="rich-link-desc">${escapeHtml(data.description)}</div>` : '';
+  slotEl.innerHTML = `
+    <a href="${escapeHtml(href)}" target="_blank" rel="noopener noreferrer" class="rich-link-card">
+      ${imgHtml}
+      <div class="rich-link-meta">
+        <div class="rich-link-domain">${escapeHtml(data.domain || '')}</div>
+        <div class="rich-link-title">${escapeHtml(data.title || '')}</div>
+        ${descHtml}
+      </div>
+    </a>
+  `;
+}
+
+// ===========================================================================
+// PINNED MESSAGES CONTROLLER
+// ===========================================================================
+async function loadPinnedMessages() {
+  if (!el.pinnedMessagesBanner || !state.currentChatTarget) return;
+  try {
+    const isChan = Boolean(state.isChannel);
+    const target = state.currentChatTarget;
+    const me = state.currentUser ? state.currentUser.username : '';
+    const res = await fetch(`/api/messages/pinned?target=${encodeURIComponent(target)}&me=${encodeURIComponent(me)}&isChannel=${isChan ? 'true' : 'false'}`);
+    const data = await res.json();
+    if (data && data.success && Array.isArray(data.pinned) && data.pinned.length > 0) {
+      state.pinnedMessages = data.pinned;
+      const latest = data.pinned[0];
+      el.pinnedMessagesBanner.classList.remove('hidden');
+      el.pinnedBannerSender.textContent = latest.displayName || `@${latest.sender}`;
+      const snippet = latest.text || (latest.file ? `📎 ${latest.file.name}` : (latest.voice ? '🎤 Voice note' : 'Shared media'));
+      el.pinnedBannerText.textContent = snippet.length > 60 ? snippet.substring(0, 60) + '…' : snippet;
+      el.pinnedMessagesBanner.dataset.msgId = latest.id;
+    } else {
+      state.pinnedMessages = [];
+      el.pinnedMessagesBanner.classList.add('hidden');
+    }
+  } catch (_) {
+    if (el.pinnedMessagesBanner) el.pinnedMessagesBanner.classList.add('hidden');
+  }
+}
+
+async function togglePinMessage(messageId, isPinned) {
+  if (!messageId || !state.currentChatTarget) return;
+  try {
+    const res = await fetch('/api/messages/pin', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        messageId: messageId,
+        isPinned: isPinned,
+        target: state.currentChatTarget,
+        isChannel: Boolean(state.isChannel)
+      })
+    });
+    const data = await res.json();
+    if (data && data.success) {
+      showToast(isPinned ? 'Message pinned to top 📌' : 'Message unpinned', '📌');
+      triggerHapticFeedback([18]);
+      loadPinnedMessages();
+    } else {
+      showToast('Could not update pinned message', '⚠️');
+    }
+  } catch (_) {
+    showToast('Network error while pinning', '⚠️');
+  }
+}
+
+if (el.pinnedMessagesBanner) {
+  el.pinnedMessagesBanner.addEventListener('click', (e) => {
+    if (e.target.closest('#btn-unpin-current-msg')) return;
+    const targetId = el.pinnedMessagesBanner.dataset.msgId;
+    if (targetId) {
+      const bubble = document.querySelector(`.message-bubble[data-msg-id="${targetId}"]`);
+      if (bubble) {
+        bubble.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        bubble.classList.remove('flash-highlight');
+        void bubble.offsetWidth;
+        bubble.classList.add('flash-highlight');
+        triggerHapticFeedback([12]);
+      } else {
+        showToast('Pinned message earlier in conversation history', '📜');
+      }
+    }
+  });
+}
+
+if (el.btnUnpinCurrentMsg) {
+  el.btnUnpinCurrentMsg.addEventListener('click', async (e) => {
+    e.stopPropagation();
+    const targetId = el.pinnedMessagesBanner.dataset.msgId;
+    if (targetId) {
+      await togglePinMessage(targetId, false);
+    }
+  });
+}
+
+// SSE listener for pinned updates
+if (state.eventSource) {
+  state.eventSource.addEventListener('message_pinned_updated', (e) => {
+    try {
+      const data = JSON.parse(e.data);
+      const curTarget = (state.currentChatTarget || '').toLowerCase();
+      if ((data.target || '').toLowerCase() === curTarget) {
+        loadPinnedMessages();
+      }
+    } catch (_) {}
+  });
+}
+
+// ===========================================================================
+// IN-CHAT MESSAGE SEARCH CONTROLLER
+// ===========================================================================
+let chatSearchMatches = [];
+let chatSearchIndex = 0;
+
+function clearChatSearchHighlights() {
+  document.querySelectorAll('.search-highlight-current').forEach(el => el.classList.remove('search-highlight-current'));
+  chatSearchMatches = [];
+  chatSearchIndex = 0;
+  if (el.chatSearchCount) el.chatSearchCount.textContent = '0 found';
+}
+
+function performInChatSearch() {
+  clearChatSearchHighlights();
+  const query = (el.inChatSearchInput ? el.inChatSearchInput.value : '').trim().toLowerCase();
+  if (!query) return;
+
+  const bubbles = Array.from(el.messagesContainer.querySelectorAll('.message-bubble'));
+  chatSearchMatches = bubbles.filter(b => {
+    const textEl = b.querySelector('.message-text');
+    const text = textEl ? textEl.textContent.toLowerCase() : b.textContent.toLowerCase();
+    return text.includes(query);
+  });
+
+  if (chatSearchMatches.length > 0) {
+    chatSearchIndex = 0;
+    updateSearchMatchDisplay();
+  } else {
+    if (el.chatSearchCount) el.chatSearchCount.textContent = '0 matches';
+  }
+}
+
+function updateSearchMatchDisplay() {
+  if (chatSearchMatches.length === 0) {
+    if (el.chatSearchCount) el.chatSearchCount.textContent = '0 matches';
+    return;
+  }
+  if (el.chatSearchCount) {
+    el.chatSearchCount.textContent = `${chatSearchIndex + 1} of ${chatSearchMatches.length}`;
+  }
+  document.querySelectorAll('.search-highlight-current').forEach(b => b.classList.remove('search-highlight-current'));
+  const currentBubble = chatSearchMatches[chatSearchIndex];
+  if (currentBubble) {
+    currentBubble.classList.add('search-highlight-current');
+    currentBubble.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    triggerHapticFeedback([10]);
+  }
+}
+
+if (el.btnToggleChatSearch) {
+  el.btnToggleChatSearch.addEventListener('click', () => {
+    if (!el.inChatSearchBar) return;
+    const isHidden = el.inChatSearchBar.classList.toggle('hidden');
+    if (!isHidden) {
+      if (el.inChatSearchInput) {
+        el.inChatSearchInput.value = '';
+        el.inChatSearchInput.focus();
+      }
+      clearChatSearchHighlights();
+    } else {
+      clearChatSearchHighlights();
+    }
+  });
+}
+
+if (el.btnCloseChatSearch) {
+  el.btnCloseChatSearch.addEventListener('click', () => {
+    if (el.inChatSearchBar) el.inChatSearchBar.classList.add('hidden');
+    clearChatSearchHighlights();
+  });
+}
+
+if (el.inChatSearchInput) {
+  el.inChatSearchInput.addEventListener('input', () => {
+    performInChatSearch();
+  });
+  el.inChatSearchInput.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      if (e.shiftKey) {
+        navigateChatSearch(-1);
+      } else {
+        navigateChatSearch(1);
+      }
+    } else if (e.key === 'Escape') {
+      if (el.inChatSearchBar) el.inChatSearchBar.classList.add('hidden');
+      clearChatSearchHighlights();
+    }
+  });
+}
+
+function navigateChatSearch(dir) {
+  if (chatSearchMatches.length === 0) return;
+  chatSearchIndex = (chatSearchIndex + dir + chatSearchMatches.length) % chatSearchMatches.length;
+  updateSearchMatchDisplay();
+}
+
+if (el.btnChatSearchPrev) {
+  el.btnChatSearchPrev.addEventListener('click', () => navigateChatSearch(-1));
+}
+
+if (el.btnChatSearchNext) {
+  el.btnChatSearchNext.addEventListener('click', () => navigateChatSearch(1));
+}
+
+// ===========================================================================
+// SHARED MEDIA & ATTACHMENTS GALLERY HUB
+// ===========================================================================
+let currentMediaCache = { photos: [], docs: [], voice: [] };
+
+async function openChatMediaHub() {
+  if (!el.modalChatMediaHub || !state.currentChatTarget) return;
+  el.modalChatMediaHub.classList.remove('hidden');
+
+  const photosGrid = document.getElementById('media-grid-photos');
+  const docsList = document.getElementById('media-list-docs');
+  const voiceList = document.getElementById('media-list-voice');
+  const countPhotos = document.getElementById('media-count-photos');
+  const countDocs = document.getElementById('media-count-docs');
+  const countVoice = document.getElementById('media-count-voice');
+
+  if (photosGrid) photosGrid.innerHTML = '<div style="grid-column:1/-1;text-align:center;padding:20px;color:var(--text-secondary);">Loading photos...</div>';
+  if (docsList) docsList.innerHTML = '<div style="text-align:center;padding:20px;color:var(--text-secondary);">Loading files...</div>';
+  if (voiceList) voiceList.innerHTML = '<div style="text-align:center;padding:20px;color:var(--text-secondary);">Loading recordings...</div>';
+
+  try {
+    const isChan = Boolean(state.isChannel);
+    const target = state.currentChatTarget;
+    const me = state.currentUser ? state.currentUser.username : '';
+    const res = await fetch(`/api/messages/media?target=${encodeURIComponent(target)}&me=${encodeURIComponent(me)}&isChannel=${isChan ? 'true' : 'false'}`);
+    const data = await res.json();
+    if (data && data.success) {
+      currentMediaCache = data.media || { photos: [], docs: [], voice: [] };
+    } else {
+      currentMediaCache = { photos: [], docs: [], voice: [] };
+    }
+  } catch (_) {
+    currentMediaCache = { photos: [], docs: [], voice: [] };
+  }
+
+  const { photos, docs, voice } = currentMediaCache;
+  if (countPhotos) countPhotos.textContent = photos.length;
+  if (countDocs) countDocs.textContent = docs.length;
+  if (countVoice) countVoice.textContent = voice.length;
+
+  renderMediaHubTab(state.sharedMediaFilter || 'photos');
+}
+
+function renderMediaHubTab(tabName) {
+  state.sharedMediaFilter = tabName;
+  document.querySelectorAll('.media-tab-btn').forEach(btn => {
+    btn.classList.toggle('active', btn.dataset.mediaFilter === tabName);
+  });
+
+  const photosGrid = document.getElementById('media-grid-photos');
+  const docsList = document.getElementById('media-list-docs');
+  const voiceList = document.getElementById('media-list-voice');
+
+  if (photosGrid) photosGrid.classList.toggle('hidden', tabName !== 'photos');
+  if (docsList) docsList.classList.toggle('hidden', tabName !== 'docs');
+  if (voiceList) voiceList.classList.toggle('hidden', tabName !== 'voice');
+
+  const { photos, docs, voice } = currentMediaCache;
+
+  if (tabName === 'photos' && photosGrid) {
+    if (photos.length === 0) {
+      photosGrid.innerHTML = '<div style="grid-column:1/-1;text-align:center;padding:36px;color:var(--text-secondary);">No photos shared yet 🖼️</div>';
+    } else {
+      photosGrid.innerHTML = photos.map(p => `
+        <div class="media-photo-item" style="cursor:pointer;position:relative;border-radius:10px;overflow:hidden;aspect-ratio:1;background:rgba(0,0,0,0.05);" data-src="${escapeHtml(p.src)}">
+          <img src="${escapeHtml(p.src)}" alt="Shared Photo" loading="lazy" style="width:100%;height:100%;object-fit:cover;" />
+        </div>
+      `).join('');
+      photosGrid.querySelectorAll('.media-photo-item').forEach(item => {
+        item.addEventListener('click', () => openLightbox(item.dataset.src));
+      });
+    }
+  } else if (tabName === 'docs' && docsList) {
+    if (docs.length === 0) {
+      docsList.innerHTML = '<div style="text-align:center;padding:36px;color:var(--text-secondary);">No documents shared yet 📄</div>';
+    } else {
+      docsList.innerHTML = docs.map(d => `
+        <div class="media-list-item" style="display:flex;align-items:center;gap:12px;padding:10px 14px;border-radius:10px;background:rgba(0,0,0,0.03);margin-bottom:8px;">
+          <span style="font-size:24px;">${getFileIcon(d.name)}</span>
+          <div style="flex:1;min-width:0;">
+            <div style="font-weight:600;font-size:13.5px;color:var(--text-primary);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escapeHtml(d.name)}</div>
+            <div style="font-size:11.5px;color:var(--text-secondary);">${formatBytes(d.size)} • ${formatTime(d.timestamp)}</div>
+          </div>
+          <button type="button" class="btn-direct-download btn-secondary" data-file-data="${escapeHtml(d.data || '')}" data-file-name="${escapeHtml(d.name)}" style="padding:6px 10px;font-size:12px;border-radius:8px;">Open</button>
+        </div>
+      `).join('');
+      docsList.querySelectorAll('.btn-direct-download').forEach(btn => {
+        btn.addEventListener('click', () => {
+          openOrDownloadAttachment({ name: btn.dataset.fileName, data: btn.dataset.fileData }, null, false);
+        });
+      });
+    }
+  } else if (tabName === 'voice' && voiceList) {
+    if (voice.length === 0) {
+      voiceList.innerHTML = '<div style="text-align:center;padding:36px;color:var(--text-secondary);">No voice notes in this chat 🎙️</div>';
+    } else {
+      voiceList.innerHTML = voice.map((v, i) => `
+        <div class="media-list-item" style="display:flex;align-items:center;gap:12px;padding:10px 14px;border-radius:10px;background:rgba(0,0,0,0.03);margin-bottom:8px;">
+          <button type="button" class="btn-play-voice-hub" data-idx="${i}" style="width:36px;height:36px;border-radius:50%;background:#007AFF;color:#fff;border:none;cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:14px;">▶</button>
+          <div style="flex:1;min-width:0;">
+            <div style="font-weight:600;font-size:13.5px;color:var(--text-primary);">${formatAudioDuration(v.duration || 0)} Voice Note</div>
+            <div style="font-size:11.5px;color:var(--text-secondary);">From @${escapeHtml(v.sender)} • ${formatTime(v.timestamp)}</div>
+          </div>
+          <audio src="${v.data}" preload="metadata" class="hidden"></audio>
+        </div>
+      `).join('');
+      voiceList.querySelectorAll('.media-list-item').forEach(row => {
+        const pBtn = row.querySelector('.btn-play-voice-hub');
+        const aEl = row.querySelector('audio');
+        if (pBtn && aEl) {
+          pBtn.addEventListener('click', () => {
+            if (aEl.paused) {
+              if (state.currentlyPlayingAudio && state.currentlyPlayingAudio !== aEl) {
+                state.currentlyPlayingAudio.pause();
+                document.querySelectorAll('.btn-play-voice-hub').forEach(b => b.textContent = '▶');
+              }
+              aEl.play().then(() => {
+                pBtn.textContent = '⏸';
+                state.currentlyPlayingAudio = aEl;
+              }).catch(() => {});
+            } else {
+              aEl.pause();
+              pBtn.textContent = '▶';
+            }
+          });
+          aEl.addEventListener('ended', () => {
+            pBtn.textContent = '▶';
+            state.currentlyPlayingAudio = null;
+          });
+        }
+      });
+    }
+  }
+}
+
+if (el.btnChatMediaHub) {
+  el.btnChatMediaHub.addEventListener('click', openChatMediaHub);
+}
+
+if (el.btnCloseMediaHub) {
+  el.btnCloseMediaHub.addEventListener('click', () => {
+    if (el.modalChatMediaHub) el.modalChatMediaHub.classList.add('hidden');
+    if (state.currentlyPlayingAudio) {
+      state.currentlyPlayingAudio.pause();
+      state.currentlyPlayingAudio = null;
+    }
+  });
+}
+
+document.querySelectorAll('.media-tab-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    const filter = btn.dataset.mediaFilter;
+    if (filter) renderMediaHubTab(filter);
+  });
+});
+

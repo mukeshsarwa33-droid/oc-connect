@@ -7,3 +7,5 @@ cloudflared
 Thumbs.db
 node_modules/
 gh
+data/*.db-wal
+data/*.db-shm

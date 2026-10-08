@@ -410,6 +410,71 @@
             </div>
             <button class="btn-join">Open</button>
           </div>
+
+          <!-- OKANAGAN COLLEGE COURSE STUDY ROOMS -->
+          <div class="channel-group-divider">
+            <span>OKANAGAN COLLEGE COURSE STUDY ROOMS</span>
+          </div>
+
+          <div class="channel-card" data-channel="cosc-study-room">
+            <div class="channel-avatar">💻</div>
+            <div class="channel-info">
+              <div class="channel-title">
+                <h4>#COSC-Computer-Science</h4>
+                <span class="channel-tag">CS & CIS • KLO</span>
+              </div>
+              <p>Coding help, labs, Python, C++, Java, web development</p>
+            </div>
+            <button class="btn-join">Open</button>
+          </div>
+
+          <div class="channel-card" data-channel="buad-study-room">
+            <div class="channel-avatar">📊</div>
+            <div class="channel-info">
+              <div class="channel-title">
+                <h4>#BUAD-Business-Admin</h4>
+                <span class="channel-tag">School of Business</span>
+              </div>
+              <p>Accounting, marketing, case competitions, economics</p>
+            </div>
+            <button class="btn-join">Open</button>
+          </div>
+
+          <div class="channel-card" data-channel="math-study-room">
+            <div class="channel-avatar">📐</div>
+            <div class="channel-info">
+              <div class="channel-title">
+                <h4>#MATH-Help-Lounge</h4>
+                <span class="channel-tag">STEM UT</span>
+              </div>
+              <p>Calculus, statistics, linear algebra problem sets</p>
+            </div>
+            <button class="btn-join">Open</button>
+          </div>
+
+          <div class="channel-card" data-channel="nursing-study-room">
+            <div class="channel-avatar">🩺</div>
+            <div class="channel-info">
+              <div class="channel-title">
+                <h4>#NURS-Health-Sciences</h4>
+                <span class="channel-tag">Health Building</span>
+              </div>
+              <p>Anatomy, clinicals, nursing cohorts, exam prep</p>
+            </div>
+            <button class="btn-join">Open</button>
+          </div>
+
+          <div class="channel-card" data-channel="engr-trades-room">
+            <div class="channel-avatar">⚡</div>
+            <div class="channel-info">
+              <div class="channel-title">
+                <h4>#ENGR-Trades-Tech</h4>
+                <span class="channel-tag">Trades Complex</span>
+              </div>
+              <p>Civil, mechanical, electrical tech, shop projects</p>
+            </div>
+            <button class="btn-join">Open</button>
+          </div>
         </div>
       </section>
     </main>
@@ -453,6 +518,19 @@
         </div>
       </div>
       <div class="chat-header-actions">
+        <button id="btn-toggle-chat-search" type="button" class="icon-btn-ios" title="Search in this chat">
+          <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="#007AFF" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="pointer-events: none;">
+            <circle cx="11" cy="11" r="8"></circle>
+            <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+          </svg>
+        </button>
+        <button id="btn-chat-media-hub" type="button" class="icon-btn-ios" title="Shared Photos, Files & Voice notes">
+          <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="#007AFF" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="pointer-events: none;">
+            <rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect>
+            <circle cx="8.5" cy="8.5" r="1.5"></circle>
+            <polyline points="21 15 16 10 5 21"></polyline>
+          </svg>
+        </button>
         <button id="btn-chat-starred" type="button" class="icon-btn-ios" title="Starred Messages in this chat">
           <svg viewBox="0 0 24 24" width="20" height="20" fill="#FF9500" style="pointer-events: none;">
             <path d="M12 17.27L18.18 21l-1.64-7.03L22 9.24l-7.19-.61L12 2 9.19 8.63 2 9.24l5.46 4.73L5.82 21z"/>
@@ -470,6 +548,33 @@
         </button>
       </div>
     </header>
+
+    <!-- IN-CHAT INLINE SEARCH BAR -->
+    <div id="in-chat-search-bar" class="in-chat-search-bar hidden">
+      <div class="in-chat-search-input-box">
+        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="#8E8E93" stroke-width="2">
+          <circle cx="11" cy="11" r="8"></circle>
+          <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+        </svg>
+        <input type="text" id="in-chat-search-input" placeholder="Search in conversation..." autocomplete="off">
+        <span id="in-chat-search-count" class="search-match-count">0 of 0</span>
+      </div>
+      <div class="in-chat-search-nav">
+        <button id="btn-chat-search-prev" class="btn-search-arrow" title="Previous match">▲</button>
+        <button id="btn-chat-search-next" class="btn-search-arrow" title="Next match">▼</button>
+        <button id="btn-close-chat-search" class="btn-search-arrow" title="Close search">✕</button>
+      </div>
+    </div>
+
+    <!-- PINNED MESSAGES BANNER -->
+    <div id="pinned-messages-banner" class="pinned-messages-banner hidden">
+      <div class="pinned-banner-icon">📌</div>
+      <div class="pinned-banner-content" id="pinned-banner-content">
+        <strong id="pinned-banner-sender">Pinned message:</strong>
+        <span id="pinned-banner-text">Welcome to class chat</span>
+      </div>
+      <button id="btn-unpin-current-msg" class="btn-unpin-pill" title="Unpin this message">Unpin</button>
+    </div>
 
     <!-- OFFLINE MODE PERSISTENT CHAT NOTICE BANNER -->
     <div id="offline-chat-banner" class="offline-chat-banner hidden">
@@ -663,6 +768,10 @@
         <button type="button" class="reaction-action-btn" id="popover-btn-copy" title="Copy Text">
           <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor"><path d="M16 1H4c-1.1 0-2 .9-2 2v14h2V3h12V1zm3 4H8c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h11c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2zm0 16H8V7h11v14z"/></svg>
           <span>Copy</span>
+        </button>
+        <button type="button" class="reaction-action-btn" id="popover-btn-pin" title="Pin / Unpin Message">
+          <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor"><path d="M16 12V4h1V2H7v2h1v8l-2 2v2h5.2v6h1.6v-6H18v-2l-2-2z"/></svg>
+          <span>Pin</span>
         </button>
       </div>
     </div>
@@ -1085,6 +1194,19 @@
             </div>
             <label class="ios-switch">
               <input type="checkbox" id="toggle-notification-sound" checked>
+              <span class="ios-switch-slider"></span>
+            </label>
+          </div>
+
+          <div class="settings-row-divider"></div>
+
+          <div class="settings-toggle-row">
+            <div class="toggle-info">
+              <strong>Haptic Vibrations</strong>
+              <small>Subtle tactile feedback when typing and tapping</small>
+            </div>
+            <label class="ios-switch">
+              <input type="checkbox" id="toggle-haptic-vibration" checked>
               <span class="ios-switch-slider"></span>
             </label>
           </div>
@@ -1970,6 +2092,39 @@
       <div class="modal-body view-scheduled-body">
         <div id="view-scheduled-list" class="scheduled-list-container">
           <!-- Dynamic Scheduled Message Items -->
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ========================================== -->
+  <!-- 8. SHARED MEDIA & ATTACHMENTS GALLERY MODAL -->
+  <!-- ========================================== -->
+  <div id="modal-chat-media-hub" class="modal-backdrop hidden">
+    <div class="modal-card chat-media-card">
+      <div class="ios-sheet-handle"></div>
+      <div class="modal-header">
+        <button id="btn-close-media-hub" type="button" class="btn-back-ios">
+          <svg viewBox="0 0 24 24" width="20" height="20" fill="#007AFF" style="pointer-events: none;"><path d="M15.41 7.41L14 6l-6 6 6 6 1.41-1.41L10.83 12z"/></svg>
+          <span class="back-text">Done</span>
+        </button>
+        <h3>Shared Media & Files</h3>
+        <div style="width: 40px;"></div>
+      </div>
+      <div class="modal-body chat-media-body">
+        <div class="media-hub-tabs">
+          <button class="media-tab-btn active" data-media-filter="photos">🖼️ Photos (<span id="media-count-photos">0</span>)</button>
+          <button class="media-tab-btn" data-media-filter="docs">📄 Docs (<span id="media-count-docs">0</span>)</button>
+          <button class="media-tab-btn" data-media-filter="voice">🎙️ Voice (<span id="media-count-voice">0</span>)</button>
+        </div>
+        <div id="media-hub-content" class="media-hub-content">
+          <div id="media-grid-photos" class="media-grid-photos"></div>
+          <div id="media-list-docs" class="media-list-docs hidden"></div>
+          <div id="media-list-voice" class="media-list-voice hidden"></div>
+          <div id="media-empty-placeholder" class="empty-placeholder hidden">
+            <div class="empty-icon">📁</div>
+            <p>No media shared in this conversation yet</p>
+          </div>
         </div>
       </div>
     </div>
