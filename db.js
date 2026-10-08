@@ -685,14 +685,23 @@ const DB = {
       const user = this.getUser(oldClean);
       if (!user) throw new Error(`User @${oldClean} not found`);
 
-      // 1. Insert new user record
-      stmts.insertUser.run(
+      // 1. Temporarily change old user's oc_id to release unique constraint
+      const tempOcId = `${user.ocId}_renaming_${Date.now()}`;
+      db.prepare('UPDATE users SET oc_id = ? WHERE username = ?').run(tempOcId, oldClean);
+
+      // 2. Insert new user record
+      db.prepare(`
+        INSERT INTO users (username, oc_id, display_name, major, avatar_color, avatar_image, email, phone, online, last_seen, created_at, is_demo, is_trusted)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `).run(
         newClean,
         user.ocId,
         newDisplayName || user.displayName,
         user.major,
         user.avatarColor,
         user.avatarImage,
+        user.email || null,
+        user.phone || null,
         1,
         Date.now(),
         user.createdAt,
@@ -700,19 +709,30 @@ const DB = {
         user.isTrusted ? 1 : 0
       );
 
-      // 2. Migrate friends
+      // 3. Migrate friends
       db.prepare('UPDATE friends SET user1 = ? WHERE user1 = ?').run(newClean, oldClean);
       db.prepare('UPDATE friends SET user2 = ? WHERE user2 = ?').run(newClean, oldClean);
 
-      // 3. Migrate friend requests
+      // 4. Migrate friend requests
       db.prepare('UPDATE friend_requests SET from_user = ? WHERE from_user = ?').run(newClean, oldClean);
       db.prepare('UPDATE friend_requests SET to_user = ? WHERE to_user = ?').run(newClean, oldClean);
 
-      // 4. Migrate trust
+      // 5. Migrate trust
       db.prepare('UPDATE trusted_users SET truster = ? WHERE truster = ?').run(newClean, oldClean);
       db.prepare('UPDATE trusted_users SET trusted = ? WHERE trusted = ?').run(newClean, oldClean);
 
-      // 5. Migrate message sender & chatIds
+      // 6. Migrate blocked users
+      db.prepare('UPDATE blocked_users SET blocker = ? WHERE blocker = ?').run(newClean, oldClean);
+      db.prepare('UPDATE blocked_users SET blocked = ? WHERE blocked = ?').run(newClean, oldClean);
+
+      // 7. Migrate user sessions
+      db.prepare('UPDATE user_sessions SET username = ? WHERE username = ?').run(newClean, oldClean);
+
+      // 8. Migrate chat groups & members
+      db.prepare('UPDATE group_members SET username = ? WHERE username = ?').run(newClean, oldClean);
+      db.prepare('UPDATE chat_groups SET created_by = ? WHERE created_by = ?').run(newClean, oldClean);
+
+      // 9. Migrate message sender & chatIds
       db.prepare('UPDATE messages SET sender = ? WHERE sender = ?').run(newClean, oldClean);
       
       const chats = db.prepare("SELECT DISTINCT chat_id FROM messages WHERE chat_id LIKE ? OR chat_id LIKE ?").all(`%${oldClean}%`, `%${oldClean}%`);
@@ -727,7 +747,7 @@ const DB = {
         }
       }
 
-      // 6. Delete old user
+      // 10. Delete old user
       db.prepare('DELETE FROM users WHERE username = ?').run(oldClean);
 
       db.exec('COMMIT;');

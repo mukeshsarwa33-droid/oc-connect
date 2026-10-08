@@ -6414,7 +6414,9 @@ if (elSettings.btnSaveUsername) {
       localStorage.setItem('oc_connect_user', JSON.stringify(data.user));
 
       // Update UI
-      el.currentUserHandle.textContent = `@${data.user.username}`;
+      if (el.currentUserHandle) el.currentUserHandle.textContent = `@${data.user.username}`;
+      if (elSettings.cardHandle) elSettings.cardHandle.textContent = `@${data.user.username}`;
+      if (elSettings.cardName) elSettings.cardName.textContent = data.user.displayName || data.user.username;
       updateAllMyAvatarInstances();
 
       // Reconnect SSE with new username
@@ -7431,8 +7433,48 @@ window.addEventListener('beforeinstallprompt', (e) => {
   }
 });
 
+// Helper: Check if app is already running in standalone mode or installed
+function checkIsAppInstalled() {
+  const isStandalone = window.matchMedia('(display-mode: standalone)').matches ||
+                       window.navigator.standalone === true ||
+                       document.referrer.includes('android-app://') ||
+                       localStorage.getItem('oc_app_installed') === 'true';
+  return isStandalone;
+}
+
+function updateInstallUi() {
+  const isInstalled = checkIsAppInstalled();
+  if (isInstalled) {
+    if (el.btnInstallApp) {
+      el.btnInstallApp.classList.add('hidden');
+    }
+    if (el.btnSettingsInstallApp) {
+      el.btnSettingsInstallApp.innerHTML = '<span>App Installed on Device ✓</span>';
+      el.btnSettingsInstallApp.style.background = 'rgba(52, 199, 89, 0.12)';
+      el.btnSettingsInstallApp.style.color = '#34C759';
+      el.btnSettingsInstallApp.style.borderColor = 'rgba(52, 199, 89, 0.3)';
+      el.btnSettingsInstallApp.onclick = () => {
+        showToast('OC Connect is running installed on your device! 📲', '✅');
+      };
+    }
+  } else {
+    if (el.btnInstallApp) {
+      el.btnInstallApp.classList.remove('hidden');
+    }
+  }
+}
+
+// Check on boot and when display-mode media query changes
+window.addEventListener('DOMContentLoaded', updateInstallUi);
+setTimeout(updateInstallUi, 500);
+try {
+  window.matchMedia('(display-mode: standalone)').addEventListener('change', updateInstallUi);
+} catch (_) {}
+
 window.addEventListener('appinstalled', () => {
   deferredPwaPrompt = null;
+  localStorage.setItem('oc_app_installed', 'true');
+  updateInstallUi();
   showToast('OC Connect is now installed on your device! 📲🎉', '✅');
   closeModal(el.modalInstallApp);
 });
