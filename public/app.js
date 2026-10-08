@@ -6122,11 +6122,16 @@ const elSettings = {
   btnChangeAvatar: document.getElementById('btn-change-avatar'),
   removePhotoBtnWrap: document.getElementById('settings-remove-photo-btn-wrap'),
   btnRemoveAvatar: document.getElementById('btn-remove-avatar'),
+  cardName: document.getElementById('settings-card-name'),
+  cardHandle: document.getElementById('settings-card-handle'),
   displayNameInput: document.getElementById('settings-display-name-input'),
   btnSaveDisplayName: document.getElementById('btn-save-display-name'),
   usernameInput: document.getElementById('settings-username-input'),
   btnSaveUsername: document.getElementById('btn-save-username-change'),
+  campusVal: document.getElementById('settings-campus-val'),
   majorVal: document.getElementById('settings-major-val'),
+  ocidVal: document.getElementById('settings-ocid-val'),
+  btnLogout: document.getElementById('btn-settings-logout'),
   avatarFileInput: document.getElementById('avatar-file-input')
 };
 
@@ -6134,10 +6139,16 @@ function openSettingsModal() {
   if (!state.currentUser) return;
   const u = state.currentUser;
 
+  // Pre-fill profile preview card
+  if (elSettings.cardName) elSettings.cardName.textContent = u.displayName || u.username;
+  if (elSettings.cardHandle) elSettings.cardHandle.textContent = `@${u.username}`;
+
   // Pre-fill fields
   if (elSettings.displayNameInput) elSettings.displayNameInput.value = u.displayName || '';
   if (elSettings.usernameInput) elSettings.usernameInput.value = '';
   if (elSettings.majorVal) elSettings.majorVal.textContent = u.major || 'Okanagan College';
+  if (elSettings.ocidVal) elSettings.ocidVal.textContent = u.ocId ? `${u.ocId}` : '••••••••';
+  if (elSettings.campusVal) elSettings.campusVal.textContent = 'Kelowna Campus (KLO)';
 
   // Render avatar
   renderAvatar(
@@ -6157,6 +6168,14 @@ function openSettingsModal() {
   loadBlockedStudentsList();
 
   openModal(elSettings.modal);
+}
+
+// Wire Sign Out inside Settings modal to main logout handler
+if (elSettings.btnLogout) {
+  elSettings.btnLogout.addEventListener('click', () => {
+    closeModal(elSettings.modal);
+    if (el.btnLogout) el.btnLogout.click();
+  });
 }
 
 // Generate Avatar via DiceBear API
@@ -6314,7 +6333,7 @@ if (elSettings.btnRemoveAvatar) {
   });
 }
 
-// Save display name (updates server-side via username change cascade-free endpoint)
+// Save display name to server
 if (elSettings.btnSaveDisplayName) {
   elSettings.btnSaveDisplayName.addEventListener('click', async () => {
     const newName = (elSettings.displayNameInput.value || '').trim();
@@ -6323,18 +6342,35 @@ if (elSettings.btnSaveDisplayName) {
       showToast('That is already your display name.', 'ℹ️');
       return;
     }
+    
+    elSettings.btnSaveDisplayName.disabled = true;
+    elSettings.btnSaveDisplayName.textContent = 'Saving...';
     try {
-      // No dedicated endpoint yet — we piggyback by storing locally and updating via profile-picture no-op
-      // In a full implementation you'd add a /api/users/update-profile endpoint
-      // For now, directly patch via change-username to trigger cascade update just for displayName
-      // We save display name in state & localStorage; server will reflect on next login
+      const res = await fetch('/api/users/display-name', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          username: state.currentUser.username,
+          displayName: newName
+        })
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        showToast(data.error || 'Failed to update name.', '❌');
+        return;
+      }
+
       state.currentUser.displayName = newName;
       localStorage.setItem('oc_connect_user', JSON.stringify(state.currentUser));
       updateAllMyAvatarInstances();
-      el.currentUserHandle.textContent = `@${state.currentUser.username}`;
+      if (elSettings.cardName) elSettings.cardName.textContent = newName;
+      if (el.currentUserHandle) el.currentUserHandle.textContent = `@${state.currentUser.username}`;
       showToast(`Display name updated to "${newName}"! ✅`, '✏️');
     } catch (err) {
       showToast('Error saving display name: ' + err.message, '❌');
+    } finally {
+      elSettings.btnSaveDisplayName.disabled = false;
+      elSettings.btnSaveDisplayName.textContent = 'Save';
     }
   });
 }

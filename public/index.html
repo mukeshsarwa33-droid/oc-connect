@@ -945,89 +945,143 @@
           <svg viewBox="0 0 24 24" width="20" height="20" fill="#007AFF"><path d="M15.41 7.41L14 6l-6 6 6 6 1.41-1.41L10.83 12z"/></svg>
           <span class="back-text">Done</span>
         </button>
-        <h3>My Profile</h3>
+        <h3>Profile & Account</h3>
         <div style="width:40px"></div>
       </div>
       <div class="modal-body settings-modal-body">
 
-        <!-- Profile Picture Hero -->
-        <div class="settings-avatar-hero">
-          <div class="settings-avatar-wrap" id="settings-avatar-wrap">
-            <div id="settings-avatar-circle" class="avatar-circle settings-avatar-lg">U</div>
-            <button class="settings-avatar-camera-btn" id="btn-change-avatar" title="Change Photo">
-              <svg viewBox="0 0 24 24" width="18" height="18" fill="white"><path d="M12 15.2A3.2 3.2 0 1 1 12 8.8a3.2 3.2 0 0 1 0 6.4zm0-2a1.2 1.2 0 1 0 0-2.4 1.2 1.2 0 0 0 0 2.4zM9 2L7.17 4H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2h-3.17L15 2H9z"/></svg>
-            </button>
+        <!-- Modern iOS Profile Hero Card -->
+        <div class="profile-preview-card">
+          <div class="profile-card-cover"></div>
+          <div class="profile-card-content">
+            <div class="settings-avatar-wrap" id="settings-avatar-wrap">
+              <div id="settings-avatar-circle" class="avatar-circle settings-avatar-lg">U</div>
+              <button class="settings-avatar-camera-btn" id="btn-change-avatar" title="Upload Photo">
+                <svg viewBox="0 0 24 24" width="16" height="16" fill="white"><path d="M12 15.2A3.2 3.2 0 1 1 12 8.8a3.2 3.2 0 0 1 0 6.4zm0-2a1.2 1.2 0 1 0 0-2.4 1.2 1.2 0 0 0 0 2.4zM9 2L7.17 4H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2h-3.17L15 2H9z"/></svg>
+              </button>
+            </div>
+            <div class="profile-card-info">
+              <h2 id="settings-card-name" class="profile-card-name">Student</h2>
+              <div class="profile-card-tags">
+                <span id="settings-card-handle" class="profile-tag-handle">@username</span>
+                <span class="profile-tag-badge">🛡️ Verified Student</span>
+              </div>
+            </div>
           </div>
-          <div class="settings-avatar-actions-row">
+          
+          <div class="profile-avatar-action-bar">
             <button id="btn-generate-avatar" class="btn-dicebear-pill" title="Generate creative avatar (Dicebear API)">
-              <span>🎲 Generate Cool Avatar</span>
+              <span>🎲 Generate Avatar</span>
             </button>
-          </div>
-          <div id="settings-remove-photo-btn-wrap" class="hidden" style="text-align:center;margin-top:6px">
-            <button id="btn-remove-avatar" class="btn-text-danger">Remove Photo</button>
-          </div>
-        </div>
-
-        <!-- Display Name -->
-        <div class="settings-section">
-          <label class="settings-label">Display Name</label>
-          <div class="settings-input-row">
-            <input type="text" id="settings-display-name-input" class="settings-input" placeholder="Your name" maxlength="30">
-            <button id="btn-save-display-name" class="btn-settings-save">Save</button>
+            <div id="settings-remove-photo-btn-wrap" class="hidden">
+              <button id="btn-remove-avatar" class="btn-pill-subtle-danger">Remove</button>
+            </div>
           </div>
         </div>
 
-        <!-- Change Username -->
-        <div class="settings-section">
-          <label class="settings-label">Username <span class="settings-label-hint">(@handle)</span></label>
-          <div class="settings-input-row">
-            <span class="settings-at">@</span>
-            <input type="text" id="settings-username-input" class="settings-input" placeholder="new_username" maxlength="20" autocomplete="off">
-            <button id="btn-save-username-change" class="btn-settings-save">Change</button>
+        <!-- Identity & Editing Card -->
+        <div class="settings-card-group">
+          <div class="settings-group-header">
+            <span>STUDENT IDENTITY</span>
           </div>
-          <p class="settings-hint">⚠️ Changing your username updates your handle everywhere. Friends can still find you.</p>
+
+          <div class="settings-row-item">
+            <div class="settings-field-meta">
+              <span class="settings-field-title">Display Name</span>
+              <span class="settings-field-desc">Shown in group chats & campus channels</span>
+            </div>
+            <div class="settings-modern-input-box">
+              <input type="text" id="settings-display-name-input" class="settings-clean-input" placeholder="Your name" maxlength="30">
+              <button id="btn-save-display-name" class="btn-settings-save">Save</button>
+            </div>
+          </div>
+
+          <div class="settings-row-divider"></div>
+
+          <div class="settings-row-item">
+            <div class="settings-field-meta">
+              <span class="settings-field-title">Username Handle</span>
+              <span class="settings-field-desc">How other students message or search you</span>
+            </div>
+            <div class="settings-modern-input-box">
+              <span class="settings-at-sign">@</span>
+              <input type="text" id="settings-username-input" class="settings-clean-input" placeholder="username" maxlength="20" autocomplete="off">
+              <button id="btn-save-username-change" class="btn-settings-save">Change</button>
+            </div>
+          </div>
         </div>
 
-        <!-- Account Info (read-only) -->
-        <div class="settings-section">
-          <label class="settings-label">Account Info</label>
-          <div class="settings-info-row">
-            <span class="settings-info-key">📍 Campus</span>
-            <span class="settings-info-val">Kelowna Campus (KLO)</span>
+        <!-- Academic & Campus Card -->
+        <div class="settings-card-group">
+          <div class="settings-group-header">
+            <span>OKANAGAN COLLEGE DETAILS</span>
           </div>
-          <div class="settings-info-row">
-            <span class="settings-info-key">🎓 Program</span>
-            <span id="settings-major-val" class="settings-info-val">Okanagan College</span>
+
+          <div class="settings-read-row">
+            <div class="settings-read-icon">📍</div>
+            <div class="settings-read-meta">
+              <span class="settings-read-label">Campus</span>
+              <span id="settings-campus-val" class="settings-read-value">Kelowna Campus (KLO)</span>
+            </div>
+          </div>
+
+          <div class="settings-row-divider"></div>
+
+          <div class="settings-read-row">
+            <div class="settings-read-icon">🎓</div>
+            <div class="settings-read-meta">
+              <span class="settings-read-label">Program / Major</span>
+              <span id="settings-major-val" class="settings-read-value">Okanagan College</span>
+            </div>
+          </div>
+
+          <div class="settings-row-divider"></div>
+
+          <div class="settings-read-row">
+            <div class="settings-read-icon">🆔</div>
+            <div class="settings-read-meta">
+              <span class="settings-read-label">Student ID</span>
+              <span id="settings-ocid-val" class="settings-read-value">••••••••</span>
+            </div>
           </div>
         </div>
 
-        <!-- Notifications & Alerts Settings -->
-        <div class="settings-section">
-          <label class="settings-label">Notifications & Alerts</label>
+        <!-- Notifications Card -->
+        <div class="settings-card-group">
+          <div class="settings-group-header">
+            <span>PREFERENCES & SOUNDS</span>
+          </div>
+
           <div class="settings-toggle-row">
             <div class="toggle-info">
               <strong>Push Notifications</strong>
-              <small>Receive alerts when messages or calls arrive</small>
+              <small>Real-time alerts for incoming chats & calls</small>
             </div>
             <label class="ios-switch">
               <input type="checkbox" id="toggle-push-notifications" checked>
               <span class="ios-switch-slider"></span>
             </label>
           </div>
+
+          <div class="settings-row-divider"></div>
+
           <div class="settings-toggle-row">
             <div class="toggle-info">
-              <strong>Notification Sounds</strong>
-              <small>Play audio chime for incoming messages</small>
+              <strong>Sound Effects</strong>
+              <small>Play subtle chimes for messages & reactions</small>
             </div>
             <label class="ios-switch">
               <input type="checkbox" id="toggle-notification-sound" checked>
               <span class="ios-switch-slider"></span>
             </label>
           </div>
+
+          <div class="settings-row-divider"></div>
+
           <div class="settings-toggle-row">
             <div class="toggle-info">
               <strong>Message Previews</strong>
-              <small>Show message text preview in notification banner</small>
+              <small>Display text preview in notification banner</small>
             </div>
             <label class="ios-switch">
               <input type="checkbox" id="toggle-message-previews" checked>
@@ -1036,26 +1090,43 @@
           </div>
         </div>
 
-        <!-- Blocked Students Manager -->
-        <div class="settings-section">
-          <label class="settings-label">Blocked Students <span id="settings-blocked-count" class="settings-label-hint">(0)</span></label>
-          <div id="settings-blocked-list" class="settings-blocked-list">
-            <p class="settings-empty-hint">No blocked students</p>
+        <!-- Privacy & Blocked List Card -->
+        <div class="settings-card-group">
+          <div class="settings-group-header">
+            <span>PRIVACY & SAFETY</span>
+          </div>
+          <div class="settings-row-item">
+            <div class="settings-field-meta">
+              <span class="settings-field-title">Blocked Students <span id="settings-blocked-count" class="settings-label-hint">(0)</span></span>
+              <span class="settings-field-desc">Blocked users cannot see your profile or send direct messages</span>
+            </div>
+            <div id="settings-blocked-list" class="settings-blocked-list">
+              <p class="settings-empty-hint">No blocked students</p>
+            </div>
           </div>
         </div>
 
-        <!-- App & Device Installation Section -->
-        <div class="settings-section">
-          <label class="settings-label">App & Device Installation</label>
+        <!-- App Installation & Device Session Card -->
+        <div class="settings-card-group">
+          <div class="settings-group-header">
+            <span>DEVICE & PWA ACCESS</span>
+          </div>
           <div class="settings-install-box">
             <div class="install-box-icon">📱</div>
             <div class="install-box-info">
               <strong>Install OC Connect App</strong>
-              <p>Add to your iPhone or Android home screen for full-screen view and quick access.</p>
+              <p>Add to your iPhone or Android home screen for full-screen view and 0ms offline access.</p>
             </div>
           </div>
-          <button id="btn-settings-install-app" type="button" class="btn-primary-block" style="margin-top:10px;">
+          <button id="btn-settings-install-app" type="button" class="btn-primary-block" style="margin-top:12px;">
             <span>Install on This Device 📲</span>
+          </button>
+        </div>
+
+        <!-- Quick Logout Option Inside Profile -->
+        <div class="settings-card-group settings-card-danger">
+          <button id="btn-settings-logout" type="button" class="btn-settings-danger-block">
+            <span>Sign Out of OC Connect</span>
           </button>
         </div>
 
