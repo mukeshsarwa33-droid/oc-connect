@@ -7020,6 +7020,44 @@ button:active {
   text-transform: uppercase;
 }
 
+/* ==========================================================================
+   AUTHENTIC STANDALONE APP DISPLAY & NOTCH SAFE AREA SUPPORT
+   ========================================================================== */
+@supports (padding-top: env(safe-area-inset-top)) {
+  .app-bar, .chat-header-ios {
+    padding-top: max(10px, env(safe-area-inset-top));
+  }
+  .input-area, .tabs-bar {
+    padding-bottom: max(8px, env(safe-area-inset-bottom));
+  }
+}
+
+@media (display-mode: standalone), (display-mode: minimal-ui) {
+  body {
+    user-select: none;
+    -webkit-user-select: none;
+    -webkit-touch-callout: none;
+  }
+  .screen {
+    height: 100vh !important;
+    max-height: 100vh !important;
+    border-radius: 0 !important;
+    border: none !important;
+    box-shadow: none !important;
+  }
+  #app-viewport {
+    height: 100vh !important;
+    max-height: 100vh !important;
+  }
+}
+
+.is-standalone-app .screen {
+  height: 100vh !important;
+  max-height: 100vh !important;
+  border-radius: 0 !important;
+  border: none !important;
+}
+
 
 
 
