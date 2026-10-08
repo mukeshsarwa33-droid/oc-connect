@@ -436,6 +436,16 @@ function initAudio() {
   }
 }
 
+// Pre-warm Web Audio hardware on first touch/click/keypress to ensure zero latency
+['click', 'touchstart', 'keydown'].forEach(evt => {
+  window.addEventListener(evt, () => {
+    initAudio();
+    if (state.audioCtx && state.audioCtx.state === 'suspended') {
+      state.audioCtx.resume().catch(() => {});
+    }
+  }, { once: true, passive: true });
+});
+
 function playSentSound() {
   try {
     initAudio();
@@ -1607,31 +1617,41 @@ if (el.toggleMessagePreviews) {
   });
 }
 
-function showInAppNotification(senderName, messageText, avatarColor, targetUsername, isChannel = false) {
+function showNativePushNotification(title, body, targetUsername, isChannel = false, isGroup = false, groupName = '') {
+  const prefs = getNotificationPrefs();
+  if (!prefs.push || !('Notification' in window) || Notification.permission !== 'granted') return;
+  try {
+    const notif = new Notification(title, {
+      body: prefs.preview ? (body || 'New message received') : 'New message received',
+      icon: 'data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><circle cx=%2250%22 cy=%2250%22 r=%2248%22 fill=%22%23075E54%22/><text x=%2250%22 y=%2264%22 font-size=%2244%22 text-anchor=%22middle%22 fill=%22white%22 font-family=%22sans-serif%22 font-weight=%22bold%22>OC</text></svg>',
+      tag: `oc_${targetUsername || 'chat'}`,
+      renotify: true
+    });
+    notif.onclick = () => {
+      window.focus();
+      if (isGroup) {
+        openGroupChat(targetUsername, groupName || title);
+      } else if (targetUsername) {
+        openChat(targetUsername, title, isChannel);
+      }
+      notif.close();
+    };
+  } catch (_) {}
+}
+
+function showInAppNotification(senderName, messageText, avatarColor, targetUsername, isChannel = false, isGroup = false, groupName = '') {
   const prefs = getNotificationPrefs();
 
   if (prefs.sound) {
     playReceivedSound();
   }
+  if (prefs.haptic) {
+    triggerHapticFeedback([25, 40, 25]);
+  }
 
-  // Native Web Push Notification (when tab is minimized / backgrounded)
-  if (document.visibilityState !== 'visible' && prefs.push && 'Notification' in window && Notification.permission === 'granted') {
-    try {
-      const bodyText = prefs.preview ? messageText : 'New message received';
-      const notif = new Notification(senderName, {
-        body: bodyText,
-        icon: 'data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220%22%20width=%22100%22%20height=%22100%22><circle cx=%2250%22 cy=%2250%22 r=%2248%22 fill=%22%23075E54%22/><text x=%2250%22 y=%2264%22 font-size=%2244%22 text-anchor=%22middle%22 fill=%22white%22 font-family=%22sans-serif%22 font-weight=%22bold%22>OC</text></svg>'
-      });
-      notif.onclick = () => {
-        window.focus();
-        if (isGroup) {
-          openGroupChat(targetUsername, groupName || senderName);
-        } else if (targetUsername) {
-          openChat(targetUsername, senderName, isChannel);
-        }
-        notif.close();
-      };
-    } catch (_) {}
+  // Native Web Push Notification (when tab is backgrounded / hidden or minimized)
+  if (document.visibilityState !== 'visible' || !document.hasFocus()) {
+    showNativePushNotification(senderName, messageText, targetUsername, isChannel, isGroup, groupName);
   }
 
   // Cupertino Dynamic Island in-app banner
@@ -1662,6 +1682,76 @@ function showInAppNotification(senderName, messageText, avatarColor, targetUsern
   }
 }
 
+// Zero-Latency Optimistic Inbox Item Update (bypasses multi-endpoint HTTP requests)
+function updateInboxItemOptimistic(chatKey, message, isGroup = false, groupTitle = '') {
+  if (!el.chatsList || !chatKey) return;
+  const targetKey = String(chatKey).trim().toLowerCase();
+
+  const itemEl = el.chatsList.querySelector(`[data-chat-key="${CSS.escape(targetKey)}"]`);
+
+  let snippetText = message.text || '';
+  if (message.voice) snippetText = '🎤 Voice message';
+  else if (message.file) snippetText = '📎 ' + (message.file.name || 'File attachment');
+  else if (message.image) snippetText = '📷 Photo';
+  else if (message.studyCard) {
+    const sc = message.studyCard;
+    snippetText = sc.type === 'wiki' ? `📖 Wiki: ${sc.title}` : (sc.type === 'book' ? `📚 Book: ${sc.title}` : (sc.type === 'joke' ? '😂 Study Joke' : '🌤️ Campus Weather'));
+  }
+
+  const isMyMsg = state.currentUser && message.sender === state.currentUser.username;
+  const tick = isMyMsg ? '<span class="tick-icon">✓✓</span> ' : '';
+
+  if (isGroup && !isMyMsg) {
+    const senderName = message.displayName || message.sender || '';
+    snippetText = `${senderName}: ${snippetText}`;
+  }
+
+  const currentChatActive = (
+    (state.isGroup && state.currentGroupId && state.currentGroupId.toLowerCase() === targetKey) ||
+    (!state.isGroup && !state.isChannel && state.currentChatTarget && state.currentChatTarget.toLowerCase() === targetKey)
+  );
+
+  if (itemEl) {
+    const snippetEl = itemEl.querySelector('.item-snippet');
+    if (snippetEl) snippetEl.innerHTML = `${tick}${escapeHtml(snippetText)}`;
+
+    const timeEl = itemEl.querySelector('.item-time');
+    if (timeEl) timeEl.textContent = 'Just now';
+
+    if (!currentChatActive && !isMyMsg) {
+      let badge = itemEl.querySelector('.unread-count-pill');
+      if (!badge) {
+        badge = document.createElement('span');
+        badge.className = 'unread-count-pill';
+        badge.textContent = '1';
+        const rightCol = itemEl.querySelector('.item-top-row > div');
+        if (rightCol) rightCol.appendChild(badge);
+      } else {
+        const count = parseInt(badge.textContent, 10) || 0;
+        badge.textContent = String(count + 1);
+      }
+    }
+
+    // Bump to top of list
+    const isPinned = itemEl.classList.contains('pinned');
+    if (isPinned) {
+      el.chatsList.insertBefore(itemEl, el.chatsList.firstChild);
+    } else {
+      const firstUnpinned = el.chatsList.querySelector('.chat-item:not(.pinned)');
+      if (firstUnpinned && firstUnpinned !== itemEl) {
+        el.chatsList.insertBefore(itemEl, firstUnpinned);
+      } else if (!firstUnpinned) {
+        el.chatsList.appendChild(itemEl);
+      }
+    }
+
+    if (el.noChatsPlaceholder) el.noChatsPlaceholder.classList.add('hidden');
+  } else {
+    // If the chat item wasn't previously loaded in the inbox, fetch it
+    loadRecentChats();
+  }
+}
+
 // Incoming 1-on-1 Message Handler
 function handleIncomingMessage(payload) {
   const { sender, message } = payload;
@@ -1678,11 +1768,23 @@ function handleIncomingMessage(payload) {
 
   const isCurrentChat = (!state.isChannel && !state.isGroup && cleanTarget === cleanSender);
 
+  let previewText = message.text || '';
+  if (message.voice) previewText = '🎤 Voice message';
+  else if (message.file) previewText = `📎 ${message.file.name || 'File'}`;
+  else if (message.image) previewText = '📷 Photo';
+  else if (message.studyCard) previewText = '📚 Study card';
+
+  const senderObj = state.friends.find(f => f.username.toLowerCase() === cleanSender) ||
+                    state.allStudents.find(s => s.username.toLowerCase() === cleanSender);
+  const senderDisplayName = (senderObj && senderObj.displayName) || message.displayName || `@${cleanSender}`;
+  const avatarColor = (senderObj && senderObj.avatarColor) || '#075E54';
+
   if (isCurrentChat && document.visibilityState === 'visible') {
     if (!state.renderedMsgIds.has(message.id)) {
       state.renderedMsgIds.add(message.id);
       const prefs = getNotificationPrefs();
       if (prefs.sound) playReceivedSound();
+      if (prefs.haptic) triggerHapticFeedback([18]);
       appendMessageToChat(message, false);
       scrollToBottom();
       checkAndTriggerCelebrationEffect(message.text);
@@ -1690,20 +1792,11 @@ function handleIncomingMessage(payload) {
     // Acknowledge read status
     fetch(`/api/messages/history?me=${encodeURIComponent(state.currentUser.username)}&target=${encodeURIComponent(cleanSender)}`);
   } else {
-    let previewText = message.text;
-    if (message.voice) previewText = '🎤 Voice message';
-    else if (message.file) previewText = `📎 ${message.file.name || 'File'}`;
-    else if (message.image) previewText = '📷 Photo';
-    else if (message.studyCard) previewText = '📚 Study card';
-
-    const senderObj = state.friends.find(f => f.username.toLowerCase() === cleanSender) ||
-                      state.allStudents.find(s => s.username.toLowerCase() === cleanSender);
-    const senderDisplayName = (senderObj && senderObj.displayName) || message.displayName || `@${cleanSender}`;
-    const avatarColor = (senderObj && senderObj.avatarColor) || '#075E54';
-
     showInAppNotification(senderDisplayName, previewText || 'Sent a message', avatarColor, cleanSender, false);
-    loadRecentChats();
   }
+
+  // Instant zero-delay inbox bump
+  updateInboxItemOptimistic(cleanSender, message, false, senderDisplayName);
 }
 
 // Incoming Channel Message Handler
@@ -1723,6 +1816,7 @@ function handleIncomingChannelMessage(payload) {
       state.renderedMsgIds.add(message.id);
       const prefs = getNotificationPrefs();
       if (prefs.sound) playReceivedSound();
+      if (prefs.haptic) triggerHapticFeedback([18]);
       appendMessageToChat(message, false);
       scrollToBottom();
       checkAndTriggerCelebrationEffect(message.text);
@@ -1756,26 +1850,30 @@ function handleIncomingGroupMessage(payload) {
 
   const isCurrentGroupChat = (state.isGroup && cleanTarget === cleanGroupId);
 
+  let previewText = message.text || '';
+  if (message.voice) previewText = '🎤 Voice message';
+  else if (message.file) previewText = `📎 ${message.file.name || 'File'}`;
+  else if (message.image) previewText = '📷 Photo';
+  else if (message.studyCard) previewText = '📚 Study card';
+
+  const senderDisplay = message.displayName || `@${message.sender}`;
+
   if (isCurrentGroupChat && document.visibilityState === 'visible') {
     if (!state.renderedMsgIds.has(message.id)) {
       state.renderedMsgIds.add(message.id);
       const prefs = getNotificationPrefs();
       if (prefs.sound) playReceivedSound();
+      if (prefs.haptic) triggerHapticFeedback([18]);
       appendMessageToChat(message, false);
       scrollToBottom();
       checkAndTriggerCelebrationEffect(message.text);
     }
   } else {
-    let previewText = message.text;
-    if (message.voice) previewText = '🎤 Voice message';
-    else if (message.file) previewText = `📎 ${message.file.name || 'File'}`;
-    else if (message.image) previewText = '📷 Photo';
-    else if (message.studyCard) previewText = '📚 Study card';
-
-    const senderDisplay = message.displayName || `@${message.sender}`;
     showInAppNotification(`${groupName || 'Group'}: ${senderDisplay}`, previewText || 'Sent a message', '#075E54', cleanGroupId, false, true, groupName);
-    loadRecentChats();
   }
+
+  // Instant zero-delay inbox bump
+  updateInboxItemOptimistic(cleanGroupId, message, true, groupName);
 }
 
 // Update Friend Online State
@@ -2234,6 +2332,7 @@ function renderRecentChatsList(mergedList) {
 
       const itemEl = document.createElement('div');
       itemEl.className = `list-item chat-item ${item.isPinned ? 'pinned' : ''}`;
+      itemEl.dataset.chatKey = (item.chatKey || item.id || item.handle || '').toLowerCase();
 
       const pinIconHtml = item.isPinned ? `<span class="chat-pin-icon" title="Pinned Chat">📌</span>` : '';
 
@@ -3630,14 +3729,17 @@ function escapeHtml(text) {
 }
 
 function scrollToBottom(smooth = true) {
-  if (smooth && typeof el.messagesContainer.scrollTo === 'function') {
-    el.messagesContainer.scrollTo({
-      top: el.messagesContainer.scrollHeight,
-      behavior: 'smooth'
-    });
-  } else {
-    el.messagesContainer.scrollTop = el.messagesContainer.scrollHeight;
-  }
+  if (!el.messagesContainer) return;
+  requestAnimationFrame(() => {
+    if (smooth && typeof el.messagesContainer.scrollTo === 'function') {
+      el.messagesContainer.scrollTo({
+        top: el.messagesContainer.scrollHeight,
+        behavior: 'smooth'
+      });
+    } else {
+      el.messagesContainer.scrollTop = el.messagesContainer.scrollHeight;
+    }
+  });
 }
 
 // Back to Home with Smooth Slide-Out
@@ -3981,6 +4083,9 @@ async function sendMessage() {
   appendMessageToChat(tempMsg, true);
   scrollToBottom();
   checkAndTriggerCelebrationEffect(text);
+
+  const sentKey = state.isGroup ? state.currentGroupId : state.currentChatTarget;
+  updateInboxItemOptimistic(sentKey, tempMsg, state.isGroup, state.currentChatTarget);
 
   try {
     const body = {

@@ -123,6 +123,7 @@ function broadcastToUser(username, eventName, data) {
     for (const res of userStreams) {
       try {
         res.write(payload);
+        if (typeof res.flush === 'function') res.flush();
       } catch (_) {
         userStreams.delete(res);
       }
@@ -136,6 +137,7 @@ function broadcastToAll(eventName, data) {
     for (const res of userStreams) {
       try {
         res.write(payload);
+        if (typeof res.flush === 'function') res.flush();
       } catch (_) {
         userStreams.delete(res);
       }
@@ -2838,6 +2840,10 @@ const server = http.createServer(async (req, res) => {
           'Access-Control-Allow-Origin': '*',
           'X-Accel-Buffering': 'no'
         });
+        if (req.socket) {
+          req.socket.setNoDelay(true);
+          req.socket.setKeepAlive(true, 15000);
+        }
         res.write(': connected\n\n');
 
         if (!sseConnections.has(resolved)) {

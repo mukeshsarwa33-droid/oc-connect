@@ -1315,6 +1315,11 @@ body {
 .messages-area {
   flex: 1;
   overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  scroll-behavior: smooth;
+  contain: content;
+  transform: translateZ(0);
+  will-change: scroll-position;
   padding: 16px 14px;
   display: flex;
   flex-direction: column;
@@ -1334,7 +1339,13 @@ body {
   display: flex;
   flex-direction: column;
   word-break: break-word;
+  contain: layout style;
+  transform: translateZ(0);
   animation: bubblePop 0.18s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+}
+
+button, .btn-send-ios, .chat-item, .nav-btn, .avatar-circle, .list-item {
+  touch-action: manipulation;
 }
 
 @keyframes bubblePop {
