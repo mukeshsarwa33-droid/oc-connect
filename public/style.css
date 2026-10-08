@@ -6312,6 +6312,9 @@ button:active {
 /* ==========================================================================
    CAMPUS CELEBRATIONS & SCREEN EFFECTS CANVAS OVERLAY
    ========================================================================== */
+/* ==========================================================================
+   CAMPUS CELEBRATIONS & SCREEN EFFECTS CANVAS OVERLAY
+   ========================================================================== */
 .screen-effects-canvas {
   position: fixed;
   top: 0;
@@ -6320,6 +6323,35 @@ button:active {
   height: 100vh;
   pointer-events: none;
   z-index: 99999;
+}
+
+/* ==========================================================================
+   OFFLINE MODE PERSISTENT CHAT NOTICE BANNER
+   ========================================================================== */
+.offline-chat-banner {
+  background: rgba(142, 142, 147, 0.14);
+  color: var(--text-secondary);
+  font-size: 11.5px;
+  font-weight: 550;
+  padding: 5px 12px;
+  text-align: center;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  border-bottom: 0.5px solid var(--ios-separator);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  animation: fadeIn 0.2s ease;
+}
+
+.offline-chat-banner.hidden {
+  display: none !important;
+}
+
+.offline-dot {
+  color: #FF9500;
+  font-weight: bold;
 }
 
 

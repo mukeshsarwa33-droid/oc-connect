@@ -62,6 +62,31 @@ function getAppPublicUrl() {
   return 'https://bridal-trim-optimal-organize.trycloudflare.com';
 }
 
+// ===========================================================================
+// LOCAL DEVICE OFFLINE CHAT STORAGE ENGINE (WhatsApp / iMessage Style)
+// ===========================================================================
+function getOfflineStorageKey(subKey) {
+  const user = state.currentUser ? state.currentUser.username : 'guest';
+  return `oc_offline_${user}_${subKey}`;
+}
+
+function saveToOfflineCache(subKey, data) {
+  try {
+    localStorage.setItem(getOfflineStorageKey(subKey), JSON.stringify(data));
+  } catch (e) {
+    // LocalStorage quota safety
+  }
+}
+
+function loadFromOfflineCache(subKey) {
+  try {
+    const raw = localStorage.getItem(getOfflineStorageKey(subKey));
+    return raw ? JSON.parse(raw) : null;
+  } catch (_) {
+    return null;
+  }
+}
+
 // DOM Elements
 const el = {
   toastContainer: document.getElementById('toast-container'),
@@ -196,6 +221,7 @@ const el = {
   chatPartnerSubtitle: document.getElementById('chat-partner-subtitle'),
   partnerBlueTick: document.getElementById('partner-blue-tick'),
   chatHeaderPartnerClick: document.getElementById('chat-header-partner-click'),
+  offlineChatBanner: document.getElementById('offline-chat-banner'),
   messagesContainer: document.getElementById('messages-container'),
   messageInputBox: document.getElementById('message-input-box'),
   messageTextInput: document.getElementById('message-text-input'),
@@ -2080,6 +2106,11 @@ async function loadRecentChats() {
       });
     });
 
+    // Cache recent chats list into local device storage
+    try {
+      saveToOfflineCache('recent_chats', mergedList);
+    } catch (_) {}
+
     // 1. Google Messages Category Filter
     if (state.inboxCategory === 'unread') {
       mergedList = mergedList.filter(item => (item.unreadCount && item.unreadCount > 0));
@@ -2121,13 +2152,26 @@ async function loadRecentChats() {
       }
     }
 
-    el.chatsList.innerHTML = '';
-
-    if (mergedList.length === 0) {
-      el.noChatsPlaceholder.classList.remove('hidden');
-      return;
+    renderRecentChatsList(mergedList);
+  } catch (err) {
+    console.error('Error loading chats:', err);
+    // Offline fallback from local device storage
+    const cachedChats = loadFromOfflineCache('recent_chats');
+    if (cachedChats && Array.isArray(cachedChats) && cachedChats.length > 0) {
+      renderRecentChatsList(cachedChats);
     }
-    el.noChatsPlaceholder.classList.add('hidden');
+  }
+}
+
+function renderRecentChatsList(mergedList) {
+  if (!el.chatsList) return;
+  el.chatsList.innerHTML = '';
+
+  if (mergedList.length === 0) {
+    if (el.noChatsPlaceholder) el.noChatsPlaceholder.classList.remove('hidden');
+    return;
+  }
+  if (el.noChatsPlaceholder) el.noChatsPlaceholder.classList.add('hidden');
 
     mergedList.forEach(item => {
       let snippetText = item.type === 'group' ? 'Tap to open group' : 'Tap to start chatting';
@@ -2218,9 +2262,6 @@ async function loadRecentChats() {
 
       el.chatsList.appendChild(itemEl);
     });
-  } catch (err) {
-    console.error('Error loading chats:', err);
-  }
 }
 
 // Tab Switching
@@ -2334,7 +2375,20 @@ async function openChat(target, title, isChannel = false, isOnline = false) {
     updateInputState();
   }
 
-  el.messagesContainer.innerHTML = '<div style="text-align:center;padding:20px;color:var(--text-light)">Loading messages...</div>';
+  // Instant offline cache load from local device storage
+  const cachedDirect = loadFromOfflineCache(`messages_${cleanTarget}`);
+  if (cachedDirect && Array.isArray(cachedDirect) && cachedDirect.length > 0) {
+    el.messagesContainer.innerHTML = '';
+    cachedDirect.forEach(m => {
+      const mSender = (m.sender || '').trim().toLowerCase().replace(/^@/, '');
+      const isSent = (mSender === state.currentUser.username.toLowerCase());
+      state.renderedMsgIds.add(m.id);
+      appendMessageToChat(m, isSent);
+    });
+    scrollToBottom(false);
+  } else {
+    el.messagesContainer.innerHTML = '<div style="text-align:center;padding:20px;color:var(--text-light)">Loading messages...</div>';
+  }
 
   // Initial load
   await fetchAndRenderChatMessages(true);
@@ -2387,7 +2441,20 @@ async function openGroupChat(groupId, groupName, avatarColor, avatarImage) {
     updateInputState();
   }
 
-  el.messagesContainer.innerHTML = '<div style="text-align:center;padding:20px;color:var(--text-light)">Loading group messages...</div>';
+  // Instant offline cache load for group
+  const cachedGroup = loadFromOfflineCache(`messages_group_${groupId}`);
+  if (cachedGroup && Array.isArray(cachedGroup) && cachedGroup.length > 0) {
+    el.messagesContainer.innerHTML = '';
+    cachedGroup.forEach(m => {
+      const mSender = (m.sender || '').trim().toLowerCase().replace(/^@/, '');
+      const isSent = (mSender === state.currentUser.username.toLowerCase());
+      state.renderedMsgIds.add(m.id);
+      appendMessageToChat(m, isSent);
+    });
+    scrollToBottom(false);
+  } else {
+    el.messagesContainer.innerHTML = '<div style="text-align:center;padding:20px;color:var(--text-light)">Loading group messages...</div>';
+  }
 
   await fetchAndRenderChatMessages(true);
 
@@ -2418,6 +2485,26 @@ async function updateGroupChatHeaderSubtitle(groupId) {
 async function fetchAndRenderChatMessages(isInitial = false) {
   if (!state.currentChatTarget || !state.currentUser) return;
 
+  const targetKey = state.isGroup ? `group_${state.currentGroupId}` : state.currentChatTarget.toLowerCase();
+  const offlineKey = `messages_${targetKey}`;
+
+  // If browser is offline, reveal offline banner and load cache
+  if (!navigator.onLine) {
+    if (el.offlineChatBanner) el.offlineChatBanner.classList.remove('hidden');
+    const cached = loadFromOfflineCache(offlineKey);
+    if (cached && Array.isArray(cached) && isInitial) {
+      el.messagesContainer.innerHTML = '';
+      cached.forEach(m => {
+        const mSender = (m.sender || '').trim().toLowerCase().replace(/^@/, '');
+        const isSent = (mSender === state.currentUser.username.toLowerCase());
+        state.renderedMsgIds.add(m.id);
+        appendMessageToChat(m, isSent);
+      });
+      scrollToBottom(false);
+    }
+    return;
+  }
+
   try {
     let url;
     if (state.isGroup) {
@@ -2429,10 +2516,20 @@ async function fetchAndRenderChatMessages(isInitial = false) {
     }
 
     const res = await fetch(url);
-    if (!res.ok) return;
+    if (!res.ok) {
+      if (el.offlineChatBanner) el.offlineChatBanner.classList.remove('hidden');
+      return;
+    }
+
+    if (el.offlineChatBanner) el.offlineChatBanner.classList.add('hidden');
     const data = await res.json();
     const messages = data.messages || [];
     state.chats[state.currentChatTarget] = messages;
+
+    // Save recent messages into local device offline storage (limit to latest 200 messages)
+    try {
+      saveToOfflineCache(offlineKey, messages.slice(-200));
+    } catch (_) {}
 
     if (isInitial) {
       el.messagesContainer.innerHTML = '';
@@ -2492,6 +2589,18 @@ async function fetchAndRenderChatMessages(isInitial = false) {
     }
   } catch (err) {
     console.error('Chat sync error:', err);
+    if (el.offlineChatBanner) el.offlineChatBanner.classList.remove('hidden');
+    const cached = loadFromOfflineCache(offlineKey);
+    if (cached && Array.isArray(cached) && isInitial && state.renderedMsgIds.size === 0) {
+      el.messagesContainer.innerHTML = '';
+      cached.forEach(m => {
+        const mSender = (m.sender || '').trim().toLowerCase().replace(/^@/, '');
+        const isSent = (mSender === state.currentUser.username.toLowerCase());
+        state.renderedMsgIds.add(m.id);
+        appendMessageToChat(m, isSent);
+      });
+      scrollToBottom(false);
+    }
   }
 }
 
@@ -8062,6 +8171,17 @@ if (state.eventSource) {
   });
 }
 
+// Online / Offline Connectivity Event Listeners
+window.addEventListener('online', () => {
+  if (el.offlineChatBanner) el.offlineChatBanner.classList.add('hidden');
+  showToast('Back online • Synced', '🟢');
+  if (state.currentChatTarget) fetchAndRenderChatMessages(false);
+  loadRecentChats();
+});
 
-
-
+window.addEventListener('offline', () => {
+  if (el.offlineChatBanner && !el.chatScreen.classList.contains('hidden')) {
+    el.offlineChatBanner.classList.remove('hidden');
+  }
+  showToast('Offline Mode • Saved chats available', '📡');
+});
