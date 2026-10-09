@@ -325,6 +325,9 @@ const stmts = {
   markMessagesRead: db.prepare(`
     UPDATE messages SET status = 'read' WHERE chat_id = ? AND sender = ? AND status != 'read'
   `),
+  markMessageDelivered: db.prepare(`
+    UPDATE messages SET status = 'delivered' WHERE id = ? AND status = 'sent'
+  `),
   getMessageById: db.prepare('SELECT * FROM messages WHERE id = ? LIMIT 1'),
   setMessagePinned: db.prepare('UPDATE messages SET is_pinned = ? WHERE id = ?'),
   getPinnedMessagesByChat: db.prepare('SELECT * FROM messages WHERE chat_id = ? AND is_pinned = 1 ORDER BY timestamp DESC LIMIT 10'),
@@ -1075,6 +1078,11 @@ const DB = {
   markChatRead(chatId, senderToMarkRead) {
     const senderClean = senderToMarkRead.trim().toLowerCase().replace(/^@/, '');
     stmts.markMessagesRead.run(chatId, senderClean);
+  },
+
+  markMessageDelivered(messageId) {
+    if (!messageId) return;
+    stmts.markMessageDelivered.run(messageId);
   },
 
   getMessageById(id) {

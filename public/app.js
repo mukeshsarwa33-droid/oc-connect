@@ -2072,10 +2072,25 @@ function connectEventSource() {
     const cleanBy = (data.by || '').toLowerCase().replace(/^@/, '');
     const cleanTarget = (state.currentChatTarget || '').toLowerCase().replace(/^@/, '');
     if (cleanTarget === cleanBy) {
-      document.querySelectorAll('.imessage-status').forEach(st => {
-        st.textContent = 'Read';
+      document.querySelectorAll('.message-bubble.sent .imessage-status').forEach(st => {
         st.classList.add('read');
+        const starBtn = st.querySelector('.msg-star-btn');
+        const starHtml = starBtn ? starBtn.outerHTML : '';
+        st.innerHTML = `<span class="msg-tick read" style="color: #34b7f1; font-weight: 700;" title="Read">✓✓</span> ${starHtml}`;
       });
+    }
+  });
+
+  state.eventSource.addEventListener('message_delivered', (e) => {
+    const data = JSON.parse(e.data);
+    const bubble = document.querySelector(`.message-bubble[data-msg-id="${data.messageId}"]`);
+    if (bubble) {
+      const statusEl = bubble.querySelector('.imessage-status');
+      if (statusEl && !statusEl.classList.contains('read')) {
+        const starBtn = bubble.querySelector('.msg-star-btn');
+        const starHtml = starBtn ? starBtn.outerHTML : '';
+        statusEl.innerHTML = `<span class="msg-tick delivered" style="color: #8e8e93; font-weight: 600;" title="Delivered">✓✓</span> ${starHtml}`;
+      }
     }
   });
 
@@ -2823,7 +2838,16 @@ function updateInboxItemOptimistic(chatKey, message, isGroup = false, groupTitle
   }
 
   const isMyMsg = state.currentUser && message.sender === state.currentUser.username;
-  const tick = isMyMsg ? '<span class="tick-icon">✓✓</span> ' : '';
+  let tick = '';
+  if (isMyMsg) {
+    if (message.status === 'read') {
+      tick = '<span class="tick-icon read">✓✓</span> ';
+    } else if (message.status === 'delivered') {
+      tick = '<span class="tick-icon delivered">✓✓</span> ';
+    } else {
+      tick = '<span class="tick-icon sent">✓</span> ';
+    }
+  }
 
   if (isGroup && !isMyMsg) {
     const senderName = message.displayName || message.sender || '';
@@ -3563,7 +3587,15 @@ function renderRecentChatsList(mergedList) {
 
       if (item.lastMessage) {
         const isMyMsg = item.lastMessage.sender === state.currentUser.username;
-        tick = isMyMsg ? (item.lastMessage.status === 'read' ? '<span class="tick-icon read">✓✓</span> ' : '<span class="tick-icon">✓✓</span> ') : '';
+        if (isMyMsg) {
+          if (item.lastMessage.status === 'read') {
+            tick = '<span class="tick-icon read">✓✓</span> ';
+          } else if (item.lastMessage.status === 'delivered') {
+            tick = '<span class="tick-icon delivered">✓✓</span> ';
+          } else {
+            tick = '<span class="tick-icon sent">✓</span> ';
+          }
+        }
         
         let msgContent = '';
         if (item.lastMessage.voice) {
@@ -3941,14 +3973,20 @@ async function fetchAndRenderChatMessages(isInitial = false) {
           hasNewReceived = true;
         }
       } else {
-        // Update read status to Read if recipient viewed
-        if (isSent && m.status === 'read') {
+        // Update read or delivered status
+        if (isSent) {
           const bubble = document.querySelector(`.message-bubble[data-msg-id="${m.id}"]`);
           if (bubble) {
             const statusEl = bubble.querySelector('.imessage-status');
-            if (statusEl && !statusEl.classList.contains('read')) {
-              statusEl.textContent = 'Read';
-              statusEl.classList.add('read');
+            if (statusEl) {
+              const starBtn = bubble.querySelector('.msg-star-btn');
+              const starHtml = starBtn ? starBtn.outerHTML : '';
+              if (m.status === 'read' && !statusEl.classList.contains('read')) {
+                statusEl.classList.add('read');
+                statusEl.innerHTML = `<span class="msg-tick read" style="color: #34b7f1; font-weight: 700;" title="Read">✓✓</span> ${starHtml}`;
+              } else if (m.status === 'delivered' && !statusEl.classList.contains('read')) {
+                statusEl.innerHTML = `<span class="msg-tick delivered" style="color: #8e8e93; font-weight: 600;" title="Delivered">✓✓</span> ${starHtml}`;
+              }
             }
           }
         }
@@ -4024,6 +4062,15 @@ function renderLinkCard(data, slotEl, targetUrl) {
       </div>
     </a>
   `;
+}
+
+function renderStatusTick(status) {
+  if (status === 'read') {
+    return `<span class="msg-tick read" title="Read">✓✓</span>`;
+  } else if (status === 'delivered') {
+    return `<span class="msg-tick delivered" title="Delivered">✓✓</span>`;
+  }
+  return `<span class="msg-tick sent" title="Sent">✓</span>`;
 }
 
 // Append Message to UI (WhatsApp & iMessage Hybrid Style)
@@ -4272,7 +4319,8 @@ function appendMessageToChat(msg, isSent) {
   let statusHtml = '';
   if (isSent) {
     const isRead = msg.status === 'read';
-    statusHtml = `<div class="imessage-status ${isRead ? 'read' : ''}">${isRead ? 'Read' : 'Delivered'} ${starBtnHtml}</div>`;
+    const tickHtml = renderStatusTick(msg.status);
+    statusHtml = `<div class="imessage-status ${isRead ? 'read' : ''}">${tickHtml} ${starBtnHtml}</div>`;
   } else {
     statusHtml = `<div class="imessage-status" style="justify-content: flex-end;">${starBtnHtml}</div>`;
   }

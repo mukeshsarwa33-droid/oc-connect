@@ -138,18 +138,22 @@ function safeWriteSSE(res, payload) {
 
 // Real-Time SSE Broadcasting Engine (Backpressure-Safe)
 function broadcastToUser(username, eventName, data) {
-  if (!username) return;
+  if (!username) return false;
   const clean = username.trim().toLowerCase().replace(/^@/, '');
   const userStreams = sseConnections.get(clean);
+  let delivered = false;
   if (userStreams && userStreams.size > 0) {
     const payload = `event: ${eventName}\ndata: ${JSON.stringify(data)}\n\n`;
     for (const res of [...userStreams]) {
       const sent = safeWriteSSE(res, payload);
       if (!sent) {
         userStreams.delete(res);
+      } else {
+        delivered = true;
       }
     }
   }
+  return delivered;
 }
 
 function broadcastToAll(eventName, data) {
@@ -1358,11 +1362,21 @@ const server = http.createServer(async (req, res) => {
           status: 'sent'
         });
 
-        broadcastToUser(resolvedRecipient, 'new_message', {
+        const isDelivered = broadcastToUser(resolvedRecipient, 'new_message', {
           sender: resolvedSender,
           chatId,
           message: newMsg
         });
+
+        if (isDelivered) {
+          DB.markMessageDelivered(msgId);
+          newMsg.status = 'delivered';
+          broadcastToUser(resolvedSender, 'message_delivered', {
+            messageId: msgId,
+            chatId,
+            status: 'delivered'
+          });
+        }
 
         // Simulated reply for demo users
         const recipientUser = DB.getUser(resolvedRecipient);

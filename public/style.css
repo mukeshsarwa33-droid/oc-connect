@@ -1407,11 +1407,32 @@ button, .btn-send-ios, .chat-item, .nav-btn, .avatar-circle, .list-item {
   margin-top: 3px;
   text-align: right;
   font-weight: 500;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 4px;
 }
 
 .imessage-status.read {
-  color: var(--text-muted);
+  color: #34b7f1;
   font-weight: 600;
+}
+
+.msg-tick, .tick-icon {
+  display: inline-block;
+  font-size: 11px;
+  line-height: 1;
+  letter-spacing: -1.5px;
+  user-select: none;
+}
+.msg-tick.sent, .tick-icon.sent {
+  color: #8e8e93;
+}
+.msg-tick.delivered, .tick-icon.delivered {
+  color: #8e8e93;
+}
+.msg-tick.read, .tick-icon.read {
+  color: #34b7f1;
 }
 
 /* ==========================================================================
