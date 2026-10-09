@@ -235,8 +235,20 @@ const MIME_TYPES = {
   '.ico': 'image/x-icon'
 };
 
+// Global Centralized Error Boundary Handler (Fix 9)
+function handleServerError(err, req, res) {
+  console.error('[SERVER ERROR]', err);
+  if (!res.headersSent) {
+    res.writeHead(500, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ error: 'Internal server error' }));
+  } else {
+    try { res.end(); } catch (_) {}
+  }
+}
+
 const server = http.createServer(async (req, res) => {
-  const host = req.headers.host || '';
+  try {
+    const host = req.headers.host || '';
   const proto = req.headers['x-forwarded-proto'] || (req.headers['cf-visitor'] && (() => { try { return JSON.parse(req.headers['cf-visitor']).scheme; } catch(_) { return null; } })());
 
   // Force HTTPS redirect on Cloudflare tunnel for microphone & WebRTC security
@@ -248,8 +260,31 @@ const server = http.createServer(async (req, res) => {
   const parsedUrl = new URL(req.url, `http://${req.headers.host || 'localhost'}`);
   const pathname = parsedUrl.pathname;
 
-  // CORS headers
-  res.setHeader('Access-Control-Allow-Origin', '*');
+  // Security Headers (Fix 10: Production Hardening)
+  res.setHeader('X-Content-Type-Options', 'nosniff');
+  res.setHeader('X-Frame-Options', 'DENY');
+  res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
+
+  // Strict CORS Header Management
+  const origin = req.headers.origin;
+  const allowedOrigins = [
+    'https://oc-connect-1.onrender.com',
+    'http://localhost:8080',
+    'http://127.0.0.1:8080'
+  ];
+  const isAllowedOrigin = origin && (
+    allowedOrigins.includes(origin) ||
+    origin.endsWith('.trycloudflare.com') ||
+    origin.endsWith('.onrender.com')
+  );
+
+  if (isAllowedOrigin) {
+    res.setHeader('Access-Control-Allow-Origin', origin);
+    res.setHeader('Access-Control-Allow-Credentials', 'true');
+  } else if (!origin) {
+    res.setHeader('Access-Control-Allow-Origin', 'https://oc-connect-1.onrender.com');
+  }
+
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, Range');
 
@@ -3235,8 +3270,8 @@ const server = http.createServer(async (req, res) => {
         res.writeHead(200, {
           'Content-Type': 'text/event-stream; charset=utf-8',
           'Cache-Control': 'no-cache, no-transform',
-          'Connection': 'keep-alive',
-          'Access-Control-Allow-Origin': '*',
+          'Access-Control-Allow-Origin': isAllowedOrigin ? origin : 'https://oc-connect-1.onrender.com',
+          'Access-Control-Allow-Credentials': 'true',
           'X-Accel-Buffering': 'no'
         });
         if (req.socket) {
@@ -3319,9 +3354,7 @@ const server = http.createServer(async (req, res) => {
       return res.end(JSON.stringify({ error: 'Endpoint not found' }));
 
     } catch (apiErr) {
-      console.error('API Error:', apiErr);
-      res.writeHead(500);
-      return res.end(JSON.stringify({ error: apiErr.message || 'Internal server error' }));
+      return handleServerError(apiErr, req, res);
     }
   }
 
@@ -3357,6 +3390,9 @@ const server = http.createServer(async (req, res) => {
     res.writeHead(200, headers);
     res.end(content);
   });
+  } catch (fatalRouteErr) {
+    handleServerError(fatalRouteErr, req, res);
+  }
 });
 
 // ==========================================
@@ -3431,6 +3467,14 @@ const scheduledRunner = setInterval(() => {
     console.error('Scheduled message runner error:', err);
   }
 }, 2500);
+// Process-Level Resilience Listeners (Prevent Fatal Server Crashes)
+process.on('uncaughtException', (err) => {
+  console.error('[CRITICAL UNCAUGHT EXCEPTION]', err);
+});
+
+process.on('unhandledRejection', (reason) => {
+  console.error('[CRITICAL UNHANDLED REJECTION]', reason);
+});
 
 if (require.main === module) {
   server.listen(PORT, () => {
