@@ -220,11 +220,11 @@ function parseJsonBody(req) {
       try {
         const bodyStr = Buffer.concat(chunks).toString('utf-8');
         resolve(bodyStr ? JSON.parse(bodyStr) : {});
-      } catch (e) {
-        reject(e);
+      } catch (_) {
+        resolve({});
       }
     });
-    req.on('error', reject);
+    req.on('error', () => resolve({}));
   });
 }
 
@@ -246,7 +246,7 @@ function handleServerError(err, req, res) {
   console.error('[SERVER ERROR]', err);
   if (!res.headersSent) {
     res.writeHead(500, { 'Content-Type': 'application/json' });
-    res.end(JSON.stringify({ error: 'Internal server error' }));
+    res.end(JSON.stringify({ error: (err && err.message) ? err.message : 'Internal server error' }));
   } else {
     try { res.end(); } catch (_) {}
   }
@@ -1194,7 +1194,7 @@ const server = http.createServer(async (req, res) => {
 
       // 9. Friends: List
       if (pathname === '/api/friends/list' && req.method === 'GET') {
-        const me = (parsedUrl.searchParams.get('username') || '').trim().toLowerCase();
+        const me = (parsedUrl.searchParams.get('username') || parsedUrl.searchParams.get('user') || parsedUrl.searchParams.get('me') || '').trim().toLowerCase();
         const resolvedMe = resolveUsername(me);
 
         if (!resolvedMe) {
@@ -1325,8 +1325,8 @@ const server = http.createServer(async (req, res) => {
 
       // 10. Messages: Get History (With Telegram / Mesibo Cursor Pagination)
       if (pathname === '/api/messages/history' && req.method === 'GET') {
-        const me = (parsedUrl.searchParams.get('me') || '').trim().toLowerCase();
-        const target = (parsedUrl.searchParams.get('target') || '').trim().toLowerCase();
+        const me = (parsedUrl.searchParams.get('me') || parsedUrl.searchParams.get('user') || parsedUrl.searchParams.get('username') || '').trim().toLowerCase();
+        const target = (parsedUrl.searchParams.get('target') || parsedUrl.searchParams.get('recipient') || parsedUrl.searchParams.get('to') || '').trim().toLowerCase();
         const isChannel = parsedUrl.searchParams.get('channel') === 'true';
         const isGroup = parsedUrl.searchParams.get('isGroup') === 'true' || target.startsWith('group_');
         const before = parsedUrl.searchParams.get('before') ? parseInt(parsedUrl.searchParams.get('before'), 10) : null;
@@ -1390,10 +1390,10 @@ const server = http.createServer(async (req, res) => {
           return res.end(JSON.stringify({ error: 'Unauthorized sender' }));
         }
 
-        // Rate limit: max 30 messages per user per minute
-        if (!checkActionRateLimit('msg', resolvedSender, 30, 60 * 1000)) {
+        // Rate limit: max 120 messages per user per minute
+        if (!checkActionRateLimit('msg', resolvedSender, 120, 60 * 1000)) {
           res.writeHead(429);
-          return res.end(JSON.stringify({ error: 'Rate limit exceeded: max 30 messages per minute.' }));
+          return res.end(JSON.stringify({ error: 'Rate limit exceeded: max 120 messages per minute.' }));
         }
 
         if (!cleanText && !image && !file && !voice && !studyCard) {
@@ -1439,7 +1439,7 @@ const server = http.createServer(async (req, res) => {
 
         // Telegram-grade: Use client permanent ID if provided, otherwise generate server ID
         const msgId = (id && typeof id === 'string' && id.trim()) ? id.trim() : ('msg_' + Date.now() + '_' + Math.random().toString(36).substr(2, 6));
-        const senderUser = DB.getUser(resolvedSender);
+        const senderUser = DB.getUser(resolvedSender) || DB.findUser(resolvedSender) || { displayName: resolvedSender, avatarColor: getAvatarColor(resolvedSender) };
 
         // A. Group Message Flow
         if (groupId || (recipient && recipient.startsWith('group_'))) {
@@ -2520,10 +2520,10 @@ const server = http.createServer(async (req, res) => {
           return res.end(JSON.stringify({ error: 'Student account not found' }));
         }
 
-        // Rate limit: max 5 calls per user per minute
-        if (!checkActionRateLimit('call', resolvedCaller, 5, 60 * 1000)) {
+        // Rate limit: max 30 calls per user per minute
+        if (!checkActionRateLimit('call', resolvedCaller, 30, 60 * 1000)) {
           res.writeHead(429);
-          return res.end(JSON.stringify({ error: 'Rate limit exceeded: max 5 calls per minute.' }));
+          return res.end(JSON.stringify({ error: 'Rate limit exceeded: max 30 calls per minute.' }));
         }
 
         if (DB.isBlocked(resolvedCaller, resolvedRecipient)) {

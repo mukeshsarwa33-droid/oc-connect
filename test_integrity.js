@@ -38,10 +38,11 @@ async function runTestSuite() {
 
   // Test 2: Relational Chat Partners with Multi-Underscore Usernames
   console.log('\n--- Test 2: Relational Chat Partners (Multi-Underscore Safety) ---');
-  const u1 = 'student_test_alpha_klo';
-  const u2 = 'student_test_beta_oc';
-  DB.upsertUser({ username: u1, displayName: 'Test Alpha', ocId: '300999001' });
-  DB.upsertUser({ username: u2, displayName: 'Test Beta', ocId: '300999002' });
+  const runId = Date.now().toString().slice(-6);
+  const u1 = 'student_test_a_' + runId;
+  const u2 = 'student_test_b_' + runId;
+  DB.upsertUser({ username: u1, displayName: 'Test Alpha ' + runId, ocId: '30099' + runId });
+  DB.upsertUser({ username: u2, displayName: 'Test Beta ' + runId, ocId: '30098' + runId });
 
   const chatId = getDeterministicChatId(u1, u2);
   DB.saveMessage({
@@ -59,8 +60,8 @@ async function runTestSuite() {
 
   // Test 3: User Renaming & Chat History Continuity
   console.log('\n--- Test 3: User Renaming & Chat History Continuity ---');
-  const u1Renamed = 'student_test_alpha_renamed';
-  DB.renameUser(u1, u1Renamed, 'Test Alpha Renamed');
+  const u1Renamed = 'student_renamed_' + runId;
+  DB.renameUser(u1, u1Renamed, 'Test Renamed ' + runId);
 
   const partnersRenamed = DB.getDirectChatPartners(u1Renamed);
   const partnersBAfterRename = DB.getDirectChatPartners(u2);
@@ -72,11 +73,13 @@ async function runTestSuite() {
 
   // Test 4: Friend System Lifecycle
   console.log('\n--- Test 4: Friend System Lifecycle ---');
-  DB.addFriend('friend_a_test', 'friend_b_test');
-  assert(DB.isFriend('friend_a_test', 'friend_b_test') === true, 'Friendship created and verified (A -> B)');
-  assert(DB.isFriend('friend_b_test', 'friend_a_test') === true, 'Friendship verified reversely (B -> A)');
-  DB.removeFriend('friend_a_test', 'friend_b_test');
-  assert(DB.isFriend('friend_a_test', 'friend_b_test') === false, 'Friendship removed cleanly');
+  const fa = 'friend_a_' + runId;
+  const fb = 'friend_b_' + runId;
+  DB.addFriend(fa, fb);
+  assert(DB.isFriend(fa, fb) === true, 'Friendship created and verified (A -> B)');
+  assert(DB.isFriend(fb, fa) === true, 'Friendship verified reversely (B -> A)');
+  DB.removeFriend(fa, fb);
+  assert(DB.isFriend(fa, fb) === false, 'Friendship removed cleanly');
 
   // Test 5: Call Record & Null-Safety Resilience
   console.log('\n--- Test 5: Voice Call Record & Null-Safety Resilience ---');

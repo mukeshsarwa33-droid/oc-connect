@@ -5459,6 +5459,10 @@ async function sendMessage() {
   const text = el.messageTextInput.value.trim();
   if (!text) return;
   if (!state.currentChatTarget) return;
+  if (!state.currentUser || !state.currentUser.username) {
+    showToast('Please sign in to send messages.', '⚠️');
+    return;
+  }
 
   // Slash Commands Support: /wiki <query>, /book <query>, /joke, /weather [campus], /help
   if (text.startsWith('/')) {
@@ -6440,6 +6444,10 @@ async function handleSignalOffer(offerData) {
 async function initiateVoiceCall(partnerOverride) {
   const partner = partnerOverride || state.currentChatTarget;
   if (!partner) return;
+  if (!state.currentUser || !state.currentUser.username) {
+    showToast('Please sign in to make voice calls.', '⚠️');
+    return;
+  }
   if (state.isChannel) {
     showToast('Voice calls are only for 1-on-1 classmate chats.', 'ℹ️');
     return;
