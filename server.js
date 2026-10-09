@@ -265,6 +265,13 @@ const server = http.createServer(async (req, res) => {
 
   const parsedUrl = new URL(req.url, `http://${req.headers.host || 'localhost'}`);
   const pathname = parsedUrl.pathname;
+  const clientIp = (
+    req.headers['cf-connecting-ip'] ||
+    (req.headers['x-forwarded-for'] ? req.headers['x-forwarded-for'].split(',')[0] : null) ||
+    req.headers['x-real-ip'] ||
+    (req.socket && req.socket.remoteAddress) ||
+    '127.0.0.1'
+  ).toString().trim();
 
   // Security Headers (Fix 10: Production Hardening)
   res.setHeader('X-Content-Type-Options', 'nosniff');
