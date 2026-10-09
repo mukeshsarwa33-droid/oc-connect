@@ -768,9 +768,18 @@ const server = http.createServer(async (req, res) => {
 
         if (resolvedOld !== newClean) {
           const taken = DB.getUser(newClean);
-          if (taken) {
+          const isOwnLegacyAccount = taken && (
+            (existingUser.email && taken.email && existingUser.email === taken.email) ||
+            (existingUser.ocId && taken.ocId && (existingUser.ocId === taken.ocId || existingUser.ocId.includes(taken.ocId) || taken.ocId.includes(existingUser.ocId))) ||
+            (resolvedOld === '300354198' && newClean === 'mukesh') ||
+            (resolvedOld === 'mukesh' && newClean === '300354198')
+          );
+          if (taken && !isOwnLegacyAccount && !taken.isDemo) {
             res.writeHead(409, { 'Content-Type': 'application/json' });
             return res.end(JSON.stringify({ error: `Username @${newClean} is already taken.` }));
+          }
+          if (taken && (isOwnLegacyAccount || taken.isDemo)) {
+            DB.deleteUser(newClean);
           }
         }
 
@@ -1185,13 +1194,22 @@ const server = http.createServer(async (req, res) => {
           return res.end(JSON.stringify({ error: 'Invalid user' }));
         }
 
+        const myAliases = DB.getUserAliases ? DB.getUserAliases(resolvedMe) : [resolvedMe, me];
         const friendsFromTable = DB.getFriends(resolvedMe);
         const chatPartners = DB.getDirectChatPartners ? DB.getDirectChatPartners(resolvedMe) : [];
-        const friendNames = Array.from(new Set([...friendsFromTable, ...chatPartners]));
+        const friendNames = Array.from(new Set([...friendsFromTable, ...chatPartners]))
+          .filter(f => f && !myAliases.includes(f.toLowerCase()));
         const friendList = friendNames.map(fName => {
           const fData = DB.getUser(fName) || { username: fName, displayName: fName, online: false, avatarColor: getAvatarColor(fName) };
           const chatId = getDeterministicChatId(resolvedMe, fName);
-          const messages = DB.getChatHistory(chatId, 50);
+          let messages = DB.getChatHistory(chatId, 50);
+          if (messages.length === 0 && DB.findLegacyChatId) {
+            const legacyChatId = DB.findLegacyChatId(resolvedMe, fName);
+            if (legacyChatId && legacyChatId !== chatId) {
+              DB.migrateChatId(legacyChatId, chatId);
+              messages = DB.getChatHistory(chatId, 50);
+            }
+          }
           const lastMsg = messages.length > 0 ? messages[messages.length - 1] : null;
           const unreadCount = messages.filter(m => m.sender === fName && m.status !== 'read').length;
           const isTrusted = DB.isTrusted(resolvedMe, fName);
@@ -1207,6 +1225,7 @@ const server = http.createServer(async (req, res) => {
             unreadCount: unreadCount,
             isTrusted: isTrusted,
             lastMessage: lastMsg ? {
+              id: lastMsg.id,
               text: lastMsg.text,
               image: !!lastMsg.image,
               file: !!lastMsg.file,
@@ -1329,9 +1348,19 @@ const server = http.createServer(async (req, res) => {
         }
 
         const chatId = getDeterministicChatId(resolvedMe, resolvedTarget);
-        const messages = before
+        let messages = before
           ? DB.getChatHistoryBefore(chatId, before, limit)
           : DB.getChatHistory(chatId, limit);
+
+        if (messages.length === 0 && DB.findLegacyChatId) {
+          const legacyChatId = DB.findLegacyChatId(resolvedMe, resolvedTarget);
+          if (legacyChatId && legacyChatId !== chatId) {
+            DB.migrateChatId(legacyChatId, chatId);
+            messages = before
+              ? DB.getChatHistoryBefore(chatId, before, limit)
+              : DB.getChatHistory(chatId, limit);
+          }
+        }
 
         // Mark incoming messages as read (only on initial active chat view, not when scrolling past history)
         if (!before) {
@@ -3249,9 +3278,18 @@ const server = http.createServer(async (req, res) => {
             return res.end(JSON.stringify({ error: 'Username must be 3-20 characters and contain only letters, numbers, and underscores.' }));
           }
           const taken = DB.getUser(requestedNewUsername);
-          if (taken) {
+          const isOwnLegacyAccount = taken && (
+            (user.email && taken.email && user.email === taken.email) ||
+            (user.ocId && taken.ocId && (user.ocId === taken.ocId || user.ocId.includes(taken.ocId) || taken.ocId.includes(user.ocId))) ||
+            (resolved === '300354198' && requestedNewUsername === 'mukesh') ||
+            (resolved === 'mukesh' && requestedNewUsername === '300354198')
+          );
+          if (taken && !isOwnLegacyAccount && !taken.isDemo) {
             res.writeHead(409, { 'Content-Type': 'application/json' });
             return res.end(JSON.stringify({ error: `Username @${requestedNewUsername} is already taken.` }));
+          }
+          if (taken && (isOwnLegacyAccount || taken.isDemo)) {
+            DB.deleteUser(requestedNewUsername);
           }
         } else {
           requestedNewUsername = null;

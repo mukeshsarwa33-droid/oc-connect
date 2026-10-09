@@ -844,6 +844,11 @@ const DB = {
     return this.getUser(clean);
   },
 
+  deleteUser(username) {
+    const clean = username.trim().toLowerCase().replace(/^@/, '');
+    db.prepare('DELETE FROM users WHERE username = ?').run(clean);
+  },
+
   renameUser(oldUsername, newUsername, newDisplayName) {
     const oldClean = oldUsername.trim().toLowerCase().replace(/^@/, '');
     const newClean = newUsername.trim().toLowerCase().replace(/^@/, '');
@@ -853,6 +858,11 @@ const DB = {
       const user = this.getUser(oldClean);
       if (!user) throw new Error(`User @${oldClean} not found`);
 
+      // If target newClean exists (e.g. duplicate or demo placeholder), remove it first so PRIMARY KEY doesn't conflict
+      if (oldClean !== newClean) {
+        db.prepare('DELETE FROM users WHERE username = ?').run(newClean);
+      }
+
       // 1. Rename user in-place in users table (preserves oc_id, profile, and all student columns)
       db.prepare(`
         UPDATE users 
@@ -861,9 +871,10 @@ const DB = {
         WHERE username = ?
       `).run(newClean, newDisplayName || null, oldClean);
 
-      // 2. Migrate friends
+      // 2. Migrate friends & clean up any duplicates or self-links
       db.prepare('UPDATE friends SET user1 = ? WHERE user1 = ?').run(newClean, oldClean);
       db.prepare('UPDATE friends SET user2 = ? WHERE user2 = ?').run(newClean, oldClean);
+      db.prepare('DELETE FROM friends WHERE user1 = user2').run();
 
       // 3. Migrate friend requests
       db.prepare('UPDATE friend_requests SET from_user = ? WHERE from_user = ?').run(newClean, oldClean);
@@ -887,15 +898,19 @@ const DB = {
       db.prepare('UPDATE group_members SET username = ? WHERE username = ?').run(newClean, oldClean);
       db.prepare('UPDATE chat_groups SET created_by = ? WHERE created_by = ?').run(newClean, oldClean);
 
-      // 8. Migrate message sender & chatIds
+      // 8. Migrate message sender & chatIds with prefix/suffix extraction
       db.prepare('UPDATE messages SET sender = ? WHERE sender = ?').run(newClean, oldClean);
       
-      const chats = db.prepare("SELECT DISTINCT chat_id FROM messages WHERE chat_id LIKE ? OR chat_id LIKE ?").all(`%${oldClean}%`, `%${oldClean}%`);
+      const chats = db.prepare("SELECT DISTINCT chat_id FROM messages WHERE (chat_id LIKE ? OR chat_id LIKE ?) AND chat_id NOT LIKE 'group_%'").all(`${oldClean}_%`, `%_${oldClean}`);
       for (const c of chats) {
         if (c.chat_id) {
-          const parts = c.chat_id.split('_');
-          if (parts.includes(oldClean)) {
-            const other = parts[0] === oldClean ? parts[1] : parts[0];
+          let other = null;
+          if (c.chat_id.startsWith(oldClean + '_')) {
+            other = c.chat_id.slice((oldClean + '_').length);
+          } else if (c.chat_id.endsWith('_' + oldClean)) {
+            other = c.chat_id.slice(0, -(('_' + oldClean).length));
+          }
+          if (other && other !== oldClean) {
             const newChatId = getDeterministicChatId(newClean, other);
             db.prepare('UPDATE messages SET chat_id = ? WHERE chat_id = ?').run(newChatId, c.chat_id);
           }
@@ -917,28 +932,87 @@ const DB = {
     }
   },
 
+  getUserAliases(username) {
+    if (!username) return [];
+    const clean = username.trim().toLowerCase().replace(/^@/, '');
+    const aliases = [clean];
+    const user = this.findUser(clean);
+    if (user) {
+      if (user.username && !aliases.includes(user.username.toLowerCase())) aliases.push(user.username.toLowerCase());
+      if (user.ocId && !aliases.includes(user.ocId.toLowerCase())) aliases.push(user.ocId.toLowerCase());
+    }
+    // Hardcoded known student ID / handle aliases
+    if (clean === '300354198' || clean === 'mukesh' || clean === 'mukesh_sarwa') {
+      ['300354198', 'mukesh', 'mukesh_sarwa'].forEach(a => { if (!aliases.includes(a)) aliases.push(a); });
+    }
+    if (clean === '300363794' || clean === 'aadi_test' || clean === 'aadi') {
+      ['300363794', 'aadi_test', 'aadi'].forEach(a => { if (!aliases.includes(a)) aliases.push(a); });
+    }
+    if (clean === 'lucas_smi_oc' || clean === 'lucas') {
+      ['lucas_smi_oc', 'lucas'].forEach(a => { if (!aliases.includes(a)) aliases.push(a); });
+    }
+    if (clean === 'emily_mar' || clean === 'emily') {
+      ['emily_mar', 'emily'].forEach(a => { if (!aliases.includes(a)) aliases.push(a); });
+    }
+    return aliases;
+  },
+
   getFriends(username) {
     const clean = username.trim().toLowerCase().replace(/^@/, '');
     const rows = stmts.getFriends.all(clean, clean, clean);
-    return rows.map(r => r.friend);
+    return rows.map(r => r.friend).filter(f => f && f !== clean);
   },
 
   getDirectChatPartners(username) {
+    if (!username) return [];
     const clean = username.trim().toLowerCase().replace(/^@/, '');
-    const rows = db.prepare("SELECT DISTINCT chat_id FROM messages WHERE (chat_id LIKE ? OR chat_id LIKE ?) AND chat_id NOT LIKE 'group_%'").all(`${clean}_%`, `%_${clean}`);
+    const aliases = this.getUserAliases(clean);
+    aliases.sort((a, b) => b.length - a.length);
+
     const partners = new Set();
+    const rows = db.prepare("SELECT DISTINCT chat_id FROM messages WHERE chat_id IS NOT NULL AND chat_id NOT LIKE 'group_%'").all();
+    
     for (const r of rows) {
-      if (r.chat_id) {
-        const parts = r.chat_id.split('_');
-        if (parts.length === 2) {
-          const other = parts[0] === clean ? parts[1] : parts[0];
-          if (other && other !== clean) {
-            partners.add(other);
+      if (!r.chat_id) continue;
+      for (const a of aliases) {
+        let other = null;
+        if (r.chat_id.startsWith(a + '_')) {
+          other = r.chat_id.slice((a + '_').length);
+        } else if (r.chat_id.endsWith('_' + a)) {
+          other = r.chat_id.slice(0, -(('_' + a).length));
+        }
+        if (other && !aliases.includes(other)) {
+          const resolvedUser = this.findUser(other);
+          const finalPartner = resolvedUser ? resolvedUser.username : other;
+          if (finalPartner && !aliases.includes(finalPartner)) {
+            partners.add(finalPartner);
           }
+          break;
         }
       }
     }
     return Array.from(partners);
+  },
+
+  findLegacyChatId(userA, userB) {
+    const aliasesA = this.getUserAliases(userA);
+    const aliasesB = this.getUserAliases(userB);
+    for (const a of aliasesA) {
+      for (const b of aliasesB) {
+        const candidate1 = `${a}_${b}`;
+        const candidate2 = `${b}_${a}`;
+        const row = db.prepare('SELECT chat_id FROM messages WHERE chat_id IN (?, ?) LIMIT 1').get(candidate1, candidate2);
+        if (row && row.chat_id) return row.chat_id;
+      }
+    }
+    return null;
+  },
+
+  migrateChatId(oldChatId, newChatId) {
+    if (!oldChatId || !newChatId || oldChatId === newChatId) return;
+    try {
+      db.prepare('UPDATE messages SET chat_id = ? WHERE chat_id = ?').run(newChatId, oldChatId);
+    } catch (_) {}
   },
 
   addFriend(userA, userB) {
@@ -1813,14 +1887,36 @@ function seedDemoStudents() {
   });
 
   db.exec('COMMIT;');
-  console.log(`✅ Seeded ${added} demo students into SQLite database!`);
+  console.log(`✅ Seeded demo students into SQLite database!`);
+}
+
+// Self-Healing Legacy Chat IDs Migration
+function migrateLegacyChatIds() {
+  const legacyPairs = [
+    ['aadi_test_mukesh', getDeterministicChatId('300354198', '300363794')],
+    ['emily_mukesh_sarwa', getDeterministicChatId('300354198', 'emily_mar')],
+    ['lucas_mukesh_sarwa', getDeterministicChatId('300354198', 'lucas_smi_oc')],
+    ['mukesh_sarwa_sharankaur', getDeterministicChatId('300354198', 'sharankaur')],
+    ['alex_mukesh', getDeterministicChatId('300354198', 'alex')],
+    ['aadi_test_lucas', getDeterministicChatId('300363794', 'lucas_smi_oc')],
+    ['aadi_test_sharankaur', getDeterministicChatId('300363794', 'sharankaur')]
+  ];
+  try {
+    for (const [oldId, newId] of legacyPairs) {
+      db.prepare('UPDATE messages SET chat_id = ? WHERE chat_id = ?').run(newId, oldId);
+    }
+    // Clean up any self-friendships
+    db.prepare('DELETE FROM friends WHERE user1 = user2').run();
+  } catch (_) {}
 }
 
 // Run Migration & Seeding
 migrateFromLegacyJson();
 seedDemoStudents();
+migrateLegacyChatIds();
 
 module.exports = {
   DB,
   getDeterministicChatId
 };
+
