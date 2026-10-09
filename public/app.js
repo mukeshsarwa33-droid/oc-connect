@@ -1704,6 +1704,125 @@ function showMainScreen() {
       checkActiveCallFallback();
     }
   }, 3500);
+
+  // Check and trigger First-Time User Experience (FTUX) Onboarding Wizard
+  setTimeout(() => {
+    checkAndTriggerOnboarding();
+  }, 400);
+}
+
+// First-Time User Experience (FTUX) Onboarding Wizard
+function checkAndTriggerOnboarding() {
+  if (!state.currentUser) return;
+  const username = state.currentUser.username;
+  const onboardedKey = 'oc_onboarded_' + username;
+
+  // If user completed onboarding or has explicit flag
+  const alreadyDone = localStorage.getItem(onboardedKey) === '1' || state.currentUser.hasOnboarded === true;
+  if (alreadyDone) return;
+
+  const modal = document.getElementById('modal-onboarding');
+  if (!modal) return;
+
+  const nameInput = document.getElementById('onboarding-display-name');
+  const campusSelect = document.getElementById('onboarding-campus-select');
+  const majorInput = document.getElementById('onboarding-major-input');
+  const bioInput = document.getElementById('onboarding-bio-input');
+  const avatarPreview = document.getElementById('onboarding-avatar-preview');
+  const styleChips = document.querySelectorAll('.onboarding-style-chip');
+  const diceBtn = document.getElementById('btn-onboarding-roll-avatar');
+  const submitBtn = document.getElementById('btn-submit-onboarding');
+
+  let chosenStyle = 'bottts';
+  let chosenSeed = username || 'student';
+  let chosenAvatarUrl = `https://api.dicebear.com/7.x/${chosenStyle}/svg?seed=${chosenSeed}`;
+
+  if (nameInput) nameInput.value = state.currentUser.displayName || '';
+  if (majorInput) majorInput.value = state.currentUser.major || '';
+  if (campusSelect && state.currentUser.campus) campusSelect.value = state.currentUser.campus;
+  if (bioInput) bioInput.value = state.currentUser.bio || '';
+
+  function refreshAvatarPreview() {
+    chosenAvatarUrl = `https://api.dicebear.com/7.x/${chosenStyle}/svg?seed=${chosenSeed}`;
+    if (avatarPreview) {
+      renderAvatar(
+        avatarPreview,
+        ((nameInput && nameInput.value) || username || 'U').charAt(0).toUpperCase(),
+        state.currentUser.avatarColor,
+        chosenAvatarUrl
+      );
+    }
+  }
+
+  styleChips.forEach(chip => {
+    chip.onclick = () => {
+      styleChips.forEach(c => c.classList.remove('active'));
+      chip.classList.add('active');
+      chosenStyle = chip.dataset.style;
+      refreshAvatarPreview();
+    };
+  });
+
+  if (diceBtn) {
+    diceBtn.onclick = () => {
+      chosenSeed = Math.random().toString(36).substring(2, 9);
+      refreshAvatarPreview();
+    };
+  }
+
+  if (nameInput) {
+    nameInput.oninput = () => refreshAvatarPreview();
+  }
+
+  refreshAvatarPreview();
+  openModal(modal);
+
+  if (submitBtn) {
+    submitBtn.onclick = async () => {
+      submitBtn.disabled = true;
+      submitBtn.textContent = 'Saving Profile... ⏳';
+
+      const finalName = (nameInput && nameInput.value ? nameInput.value.trim() : '') || state.currentUser.displayName || username;
+      const finalMajor = (majorInput && majorInput.value ? majorInput.value.trim() : '') || 'Okanagan College';
+      const finalCampus = (campusSelect && campusSelect.value) ? campusSelect.value : 'Kelowna Campus (KLO)';
+      const finalBio = (bioInput && bioInput.value ? bioInput.value.trim() : '');
+
+      try {
+        const res = await fetch('/api/users/profile', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            username: username,
+            displayName: finalName,
+            major: finalMajor,
+            campus: finalCampus,
+            bio: finalBio,
+            avatarImage: chosenAvatarUrl,
+            hasOnboarded: true
+          })
+        });
+
+        const data = await res.json();
+        if (data.user) {
+          state.currentUser = data.user;
+          localStorage.setItem('oc_connect_user', JSON.stringify(data.user));
+          updateAllMyAvatarInstances();
+        }
+
+        localStorage.setItem(onboardedKey, '1');
+        closeModal(modal);
+        showToast(`Welcome aboard, ${finalName}! 🎓 Your profile is all set.`, '🎉');
+        loadCampusDirectory();
+        loadFriendsList();
+        loadRecentChats();
+      } catch (err) {
+        showToast('Error saving profile: ' + err.message, '⚠️');
+      } finally {
+        submitBtn.disabled = false;
+        submitBtn.textContent = 'Complete Setup & Start Chatting 🚀';
+      }
+    };
+  }
 }
 
 // Real-Time EventSource (SSE) with Auto-Reconnect
@@ -1809,8 +1928,59 @@ function connectEventSource() {
     updateFriendOnlineStatus(data.username, data.online);
   });
 
-  state.eventSource.addEventListener('directory_updated', () => {
+  function applyUserUpdateEverywhere(u) {
+    if (!u || !u.username) return;
+    const cleanU = u.username.toLowerCase();
+
+    // 1. If active 1-on-1 chat is with this user, update chat header
+    if (!state.isChannel && !state.isGroup && state.activeChat && state.activeChat.partner.toLowerCase() === cleanU) {
+      if (el.chatHeaderTitle) el.chatHeaderTitle.textContent = u.displayName || u.username;
+      if (el.chatHeaderSubtitle) el.chatHeaderSubtitle.textContent = u.major || 'Okanagan College';
+      if (el.chatHeaderAvatar) {
+        const letter = (u.displayName || u.username).charAt(0).toUpperCase();
+        renderAvatar(el.chatHeaderAvatar, letter, u.avatarColor, u.avatarImage || null);
+      }
+    }
+
+    // 2. If current user, update my header and localStorage
+    if (state.currentUser && state.currentUser.username.toLowerCase() === cleanU) {
+      Object.assign(state.currentUser, u);
+      localStorage.setItem('oc_connect_user', JSON.stringify(state.currentUser));
+      updateAllMyAvatarInstances();
+    }
+
+    // 3. Update in memory friends list
+    if (state.friends && Array.isArray(state.friends)) {
+      const idx = state.friends.findIndex(f => (f.username || '').toLowerCase() === cleanU);
+      if (idx !== -1) {
+        Object.assign(state.friends[idx], u);
+      }
+    }
+  }
+
+  state.eventSource.addEventListener('directory_updated', (e) => {
+    try {
+      if (e.data) {
+        const data = JSON.parse(e.data);
+        if (data.updatedUser) {
+          applyUserUpdateEverywhere(data.updatedUser);
+        }
+      }
+    } catch (_) {}
     loadCampusDirectory();
+    loadFriendsList();
+    loadRecentChats();
+  });
+
+  state.eventSource.addEventListener('user_updated', (e) => {
+    try {
+      const data = JSON.parse(e.data);
+      if (data.user) {
+        applyUserUpdateEverywhere(data.user);
+        loadFriendsList();
+        loadRecentChats();
+      }
+    } catch (_) {}
   });
 
   // Group Event Listeners (WhatsApp Style Real-Time Multi-Member Sync)
@@ -5615,6 +5785,71 @@ if (el.btnVoiceRecord) el.btnVoiceRecord.addEventListener('click', startVoiceRec
 if (el.btnCancelRecording) el.btnCancelRecording.addEventListener('click', () => stopVoiceRecording(false));
 if (el.btnSendRecording) el.btnSendRecording.addEventListener('click', () => stopVoiceRecording(true));
 
+// Web Speech API: Live Voice Dictation (Speech-to-Text) in Message Input
+const elBtnDictation = document.getElementById('btn-speech-dictation');
+let speechRecognitionInstance = null;
+let isDictating = false;
+
+if (elBtnDictation) {
+  const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+  if (SpeechRecognition) {
+    try {
+      speechRecognitionInstance = new SpeechRecognition();
+      speechRecognitionInstance.continuous = true;
+      speechRecognitionInstance.interimResults = true;
+      speechRecognitionInstance.lang = 'en-US';
+
+      speechRecognitionInstance.onstart = () => {
+        isDictating = true;
+        elBtnDictation.classList.add('listening');
+        elBtnDictation.title = 'Listening... tap to finish dictation';
+        showToast('Listening... speak your message 🎙️', '🎤');
+      };
+
+      speechRecognitionInstance.onresult = (event) => {
+        let transcript = '';
+        for (let i = event.resultIndex; i < event.results.length; ++i) {
+          if (event.results[i].isFinal) {
+            transcript += event.results[i][0].transcript;
+          }
+        }
+        if (transcript && el.messageInput) {
+          const current = el.messageInput.value;
+          el.messageInput.value = (current ? current.trim() + ' ' : '') + transcript.trim() + ' ';
+          el.messageInput.focus();
+        }
+      };
+
+      speechRecognitionInstance.onerror = (err) => {
+        console.warn('[Speech Recognition Info]', err);
+        isDictating = false;
+        elBtnDictation.classList.remove('listening');
+      };
+
+      speechRecognitionInstance.onend = () => {
+        isDictating = false;
+        elBtnDictation.classList.remove('listening');
+      };
+
+      elBtnDictation.addEventListener('click', (e) => {
+        e.preventDefault();
+        if (!speechRecognitionInstance) return;
+        if (isDictating) {
+          speechRecognitionInstance.stop();
+        } else {
+          try {
+            speechRecognitionInstance.start();
+          } catch (_) {
+            speechRecognitionInstance.stop();
+          }
+        }
+      });
+    } catch (_) {}
+  } else {
+    elBtnDictation.style.display = 'none';
+  }
+}
+
 // WebRTC Live Voice Calling System (Real-Time Peer-to-Peer Audio + Dual Audio Bridge)
 const RTC_CONFIG = {
   iceServers: [
@@ -5625,7 +5860,9 @@ const RTC_CONFIG = {
     { urls: 'stun:stun4.l.google.com:19302' },
     { urls: 'stun:stun.cloudflare.com:3478' },
     { urls: 'stun:stun.services.mozilla.com' },
-    { urls: 'stun:global.stun.twilio.com:3478' }
+    { urls: 'turn:openrelay.metered.ca:80', username: 'openrelay', credential: 'openrelay' },
+    { urls: 'turn:openrelay.metered.ca:443', username: 'openrelay', credential: 'openrelay' },
+    { urls: 'turn:openrelay.metered.ca:443?transport=tcp', username: 'openrelay', credential: 'openrelay' }
   ]
 };
 
@@ -7382,10 +7619,15 @@ const elSettings = {
   cardHandle: document.getElementById('settings-card-handle'),
   displayNameInput: document.getElementById('settings-display-name-input'),
   btnSaveDisplayName: document.getElementById('btn-save-display-name'),
+  bioInput: document.getElementById('settings-bio-input'),
+  btnSaveBio: document.getElementById('btn-save-bio'),
   usernameInput: document.getElementById('settings-username-input'),
   btnSaveUsername: document.getElementById('btn-save-username-change'),
+  campusSelect: document.getElementById('settings-campus-select'),
+  btnSaveCampus: document.getElementById('btn-save-campus'),
   majorInput: document.getElementById('settings-major-input'),
   btnSaveMajor: document.getElementById('btn-save-major'),
+  btnShareMyProfile: document.getElementById('btn-share-my-profile'),
   ocidVal: document.getElementById('settings-ocid-val'),
   btnLogout: document.getElementById('btn-settings-logout'),
   avatarFileInput: document.getElementById('avatar-file-input'),
@@ -7402,6 +7644,8 @@ function openSettingsModal() {
 
   // Pre-fill fields
   if (elSettings.displayNameInput) elSettings.displayNameInput.value = u.displayName || u.username || '';
+  if (elSettings.bioInput) elSettings.bioInput.value = u.bio || '';
+  if (elSettings.campusSelect) elSettings.campusSelect.value = u.campus || 'Kelowna Campus (KLO)';
   if (elSettings.usernameInput) elSettings.usernameInput.value = '';
   if (elSettings.majorInput) elSettings.majorInput.value = u.major || 'Okanagan College';
   if (elSettings.ocidVal) elSettings.ocidVal.textContent = u.ocId ? `${u.ocId}` : '••••••••';
@@ -7707,7 +7951,118 @@ async function saveMajorAction() {
   }
 }
 
-// Save display name button & Enter key
+// Helper to save bio / status
+async function saveBioAction() {
+  if (!state.currentUser || !elSettings.bioInput) return;
+  const newBio = (elSettings.bioInput.value || '').trim();
+  if (newBio === (state.currentUser.bio || '')) return;
+
+  if (elSettings.btnSaveBio) {
+    elSettings.btnSaveBio.disabled = true;
+    elSettings.btnSaveBio.textContent = 'Saving...';
+  }
+
+  try {
+    const res = await fetch('/api/users/profile', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        username: state.currentUser.username,
+        bio: newBio
+      })
+    });
+    const data = await res.json();
+    if (!res.ok) {
+      showToast(data.error || 'Failed to update bio.', '❌');
+      return;
+    }
+
+    state.currentUser.bio = newBio;
+    localStorage.setItem('oc_connect_user', JSON.stringify(state.currentUser));
+    showToast('Status / Bio updated ✅', '📝');
+  } catch (err) {
+    showToast('Error saving bio: ' + err.message, '❌');
+  } finally {
+    if (elSettings.btnSaveBio) {
+      elSettings.btnSaveBio.disabled = false;
+      elSettings.btnSaveBio.textContent = 'Save';
+    }
+  }
+}
+
+// Helper to save campus
+async function saveCampusAction() {
+  if (!state.currentUser || !elSettings.campusSelect) return;
+  const newCampus = elSettings.campusSelect.value;
+  if (!newCampus || newCampus === state.currentUser.campus) return;
+
+  if (elSettings.btnSaveCampus) {
+    elSettings.btnSaveCampus.disabled = true;
+    elSettings.btnSaveCampus.textContent = 'Saving...';
+  }
+
+  try {
+    const res = await fetch('/api/users/profile', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        username: state.currentUser.username,
+        campus: newCampus
+      })
+    });
+    const data = await res.json();
+    if (!res.ok) {
+      showToast(data.error || 'Failed to update campus.', '❌');
+      return;
+    }
+
+    state.currentUser.campus = newCampus;
+    localStorage.setItem('oc_connect_user', JSON.stringify(state.currentUser));
+    showToast(`Campus set to: ${newCampus} ✅`, '📍');
+  } catch (err) {
+    showToast('Error saving campus: ' + err.message, '❌');
+  } finally {
+    if (elSettings.btnSaveCampus) {
+      elSettings.btnSaveCampus.disabled = false;
+      elSettings.btnSaveCampus.textContent = 'Save';
+    }
+  }
+}
+
+// Native Web Share API for Student Profile Card
+if (elSettings.btnShareMyProfile) {
+  elSettings.btnShareMyProfile.addEventListener('click', async () => {
+    if (!state.currentUser) return;
+    const u = state.currentUser;
+    const shareData = {
+      title: `${u.displayName} on Okanagan College Connect`,
+      text: `Connect with ${u.displayName} (@${u.username}) • ${u.major || 'Okanagan College'} on OC Connect! 🎓`,
+      url: window.location.origin
+    };
+
+    if (navigator.share) {
+      try {
+        await navigator.share(shareData);
+        showToast('Profile shared successfully! 📤', '🎉');
+      } catch (err) {
+        if (err.name !== 'AbortError') copyStudentInviteLink(u);
+      }
+    } else {
+      copyStudentInviteLink(u);
+    }
+  });
+}
+
+function copyStudentInviteLink(u) {
+  const shareText = `Connect with ${u.displayName} (@${u.username}) on Okanagan College Connect: ${window.location.origin}`;
+  navigator.clipboard.writeText(shareText).then(() => {
+    showToast('Student invite link copied to clipboard! 📋', '✅');
+  }).catch(() => {
+    showToast(`Share text: @${u.username}`, '📋');
+  });
+}
+
+// Save display name button, Enter key, and auto-save on blur
 if (elSettings.btnSaveDisplayName) {
   elSettings.btnSaveDisplayName.addEventListener('click', saveDisplayNameAction);
 }
@@ -7718,9 +8073,14 @@ if (elSettings.displayNameInput) {
       saveDisplayNameAction();
     }
   });
+  elSettings.displayNameInput.addEventListener('blur', () => {
+    if (state.currentUser && elSettings.displayNameInput.value.trim() !== state.currentUser.displayName) {
+      saveDisplayNameAction();
+    }
+  });
 }
 
-// Save program/major button & Enter key
+// Save program/major button, Enter key, and auto-save on blur
 if (elSettings.btnSaveMajor) {
   elSettings.btnSaveMajor.addEventListener('click', saveMajorAction);
 }
@@ -7731,6 +8091,37 @@ if (elSettings.majorInput) {
       saveMajorAction();
     }
   });
+  elSettings.majorInput.addEventListener('blur', () => {
+    if (state.currentUser && elSettings.majorInput.value.trim() !== state.currentUser.major) {
+      saveMajorAction();
+    }
+  });
+}
+
+// Save bio button & blur
+if (elSettings.btnSaveBio) {
+  elSettings.btnSaveBio.addEventListener('click', saveBioAction);
+}
+if (elSettings.bioInput) {
+  elSettings.bioInput.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      saveBioAction();
+    }
+  });
+  elSettings.bioInput.addEventListener('blur', () => {
+    if (state.currentUser && elSettings.bioInput.value.trim() !== (state.currentUser.bio || '')) {
+      saveBioAction();
+    }
+  });
+}
+
+// Save campus button & change event
+if (elSettings.btnSaveCampus) {
+  elSettings.btnSaveCampus.addEventListener('click', saveCampusAction);
+}
+if (elSettings.campusSelect) {
+  elSettings.campusSelect.addEventListener('change', saveCampusAction);
 }
 
 // Helper to change username

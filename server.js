@@ -387,10 +387,13 @@ const server = http.createServer(async (req, res) => {
             ocId: finalOcId,
             displayName: finalDisplayName,
             major: major || otp.major || 'Okanagan College • KLO',
+            campus: 'Kelowna Campus (KLO)',
+            bio: '',
             email: otp.email || null,
             phone: otp.phone || null,
             avatarColor: avatarColor,
             avatarImage: null,
+            hasOnboarded: 0,
             online: true,
             isDemo: false,
             isTrusted: false
@@ -399,6 +402,17 @@ const server = http.createServer(async (req, res) => {
           // Give new student welcoming classmates
           DB.addFriendRequest('req_init_' + Date.now() + '_1', 'lucas_smi_oc', finalUsername, 'Lucas S.', '#075E54', 'CIS Year 2 • KLO');
           DB.addFriendRequest('req_init_' + Date.now() + '_2', 'emily_bro_klo', finalUsername, 'Emily B.', '#25D366', 'Nursing BSN • Kelowna');
+
+          // Seed welcoming direct message from OC Student Association
+          DB.saveMessage({
+            id: 'welcome_' + Date.now() + '_' + finalUsername,
+            sender: 'ocsa_connect',
+            recipient: finalUsername,
+            displayName: 'OC Student Association 🎓',
+            text: `Welcome to Okanagan College Connect, ${user.displayName}! 🎓\n\nYou're connected to fellow students, campus study channels, and real-time messaging.\n\n• 🎓 Directory: Search classmates by program\n• 👥 Friends: Connect with peers\n• 📞 High-Def Calls: Voice calls right in chat\n• 🎤 Voice Dictation: Speak to type messages hands-free\n\nHave an amazing semester at Okanagan College!`,
+            status: 'read',
+            timestamp: Date.now()
+          });
 
           broadcastToAll('directory_updated', {
             newUser: {
@@ -417,16 +431,33 @@ const server = http.createServer(async (req, res) => {
           if (!user) {
             const finalOcId = otp.ocId || (otp.email ? otp.email.split('@')[0] : '300' + Math.floor(100000 + Math.random()*900000));
             const finalUsername = targetUsername || (otp.email ? otp.email.split('@')[0] : 'student_' + finalOcId.slice(-4));
+            const finalDisplayName = (displayName || otp.fullName || finalUsername).trim();
             user = DB.upsertUser({
               username: finalUsername,
               ocId: finalOcId,
-              displayName: finalUsername,
-              major: 'Okanagan College',
+              displayName: finalDisplayName,
+              major: major || otp.major || 'Okanagan College • KLO',
+              campus: 'Kelowna Campus (KLO)',
+              bio: '',
               email: otp.email || null,
               phone: otp.phone || null,
               avatarColor: getAvatarColor(finalUsername),
+              hasOnboarded: 0,
               online: true,
               isDemo: false
+            });
+
+            DB.addFriendRequest('req_init_' + Date.now() + '_1', 'lucas_smi_oc', finalUsername, 'Lucas S.', '#075E54', 'CIS Year 2 • KLO');
+            DB.addFriendRequest('req_init_' + Date.now() + '_2', 'emily_bro_klo', finalUsername, 'Emily B.', '#25D366', 'Nursing BSN • Kelowna');
+
+            DB.saveMessage({
+              id: 'welcome_' + Date.now() + '_' + finalUsername,
+              sender: 'ocsa_connect',
+              recipient: finalUsername,
+              displayName: 'OC Student Association 🎓',
+              text: `Welcome to Okanagan College Connect, ${user.displayName}! 🎓\n\nYou're connected to fellow students, campus study channels, and real-time messaging.\n\n• 🎓 Directory: Search classmates by program\n• 👥 Friends: Connect with peers\n• 📞 High-Def Calls: Voice calls right in chat\n• 🎤 Voice Dictation: Speak to type messages hands-free\n\nHave an amazing semester at Okanagan College!`,
+              status: 'read',
+              timestamp: Date.now()
             });
           } else {
             DB.setUserOnline(user.username, true);
@@ -450,10 +481,13 @@ const server = http.createServer(async (req, res) => {
             username: user.username,
             displayName: user.displayName,
             major: user.major || 'Okanagan College',
+            campus: user.campus || 'Kelowna Campus (KLO)',
+            bio: user.bio || '',
             email: user.email || null,
             phone: user.phone || null,
             avatarColor: user.avatarColor,
             avatarImage: user.avatarImage || null,
+            hasOnboarded: Boolean(user.hasOnboarded),
             isTrusted: Boolean(user.isTrusted)
           }
         }));
@@ -473,10 +507,13 @@ const server = http.createServer(async (req, res) => {
             username: auth.user.username,
             displayName: auth.user.displayName,
             major: auth.user.major || 'Okanagan College',
+            campus: auth.user.campus || 'Kelowna Campus (KLO)',
+            bio: auth.user.bio || '',
             email: auth.user.email || null,
             phone: auth.user.phone || null,
             avatarColor: auth.user.avatarColor,
             avatarImage: auth.user.avatarImage || null,
+            hasOnboarded: Boolean(auth.user.hasOnboarded),
             isTrusted: Boolean(auth.user.isTrusted)
           }
         }));
@@ -569,16 +606,29 @@ const server = http.createServer(async (req, res) => {
           ocId: cleanOcId,
           username: cleanUsername,
           displayName: (displayName || cleanUsername).trim(),
-          major: major || 'Okanagan College',
+          major: major || 'Okanagan College • KLO',
+          campus: 'Kelowna Campus (KLO)',
+          bio: '',
           avatarColor: avatarColor,
           avatarImage: null,
+          hasOnboarded: 0,
           online: true,
           isDemo: false
         });
 
-        // Give newly registered students 2 welcoming friend requests
-        DB.addFriendRequest('req_init_1', 'lucas_smi_oc', cleanUsername, 'Lucas S.', '#075E54', 'CIS Year 2 • KLO');
-        DB.addFriendRequest('req_init_2', 'emily_bro_klo', cleanUsername, 'Emily B.', '#25D366', 'Nursing BSN • Kelowna');
+        // Give newly registered students 2 welcoming friend requests & welcome DM
+        DB.addFriendRequest('req_init_' + Date.now() + '_1', 'lucas_smi_oc', cleanUsername, 'Lucas S.', '#075E54', 'CIS Year 2 • KLO');
+        DB.addFriendRequest('req_init_' + Date.now() + '_2', 'emily_bro_klo', cleanUsername, 'Emily B.', '#25D366', 'Nursing BSN • Kelowna');
+
+        DB.saveMessage({
+          id: 'welcome_' + Date.now() + '_' + cleanUsername,
+          sender: 'ocsa_connect',
+          recipient: cleanUsername,
+          displayName: 'OC Student Association 🎓',
+          text: `Welcome to Okanagan College Connect, ${userObj.displayName}! 🎓\n\nYou're connected to fellow students, campus study channels, and real-time messaging.\n\n• 🎓 Directory: Search classmates by program\n• 👥 Friends: Connect with peers\n• 📞 High-Def Calls: Voice calls right in chat\n• 🎤 Voice Dictation: Speak to type messages hands-free\n\nHave an amazing semester at Okanagan College!`,
+          status: 'read',
+          timestamp: Date.now()
+        });
 
         broadcastToAll('directory_updated', {
           newUser: {
@@ -600,7 +650,14 @@ const server = http.createServer(async (req, res) => {
             username: cleanUsername,
             displayName: userObj.displayName,
             major: userObj.major,
-            avatarColor: avatarColor
+            campus: userObj.campus || 'Kelowna Campus (KLO)',
+            bio: userObj.bio || '',
+            email: userObj.email || null,
+            phone: userObj.phone || null,
+            avatarColor: avatarColor,
+            avatarImage: userObj.avatarImage || null,
+            hasOnboarded: Boolean(userObj.hasOnboarded),
+            isTrusted: Boolean(userObj.isTrusted)
           }
         }));
       }
@@ -2852,9 +2909,11 @@ const server = http.createServer(async (req, res) => {
       }
 
       // 23. Profile Picture Upload & Disk Persistence
+      // 23. Profile Picture Upload & Disk Persistence (Supports Dicebear URLs, SVGs, and Photos)
       if (pathname === '/api/users/profile-picture' && req.method === 'POST') {
         const { username, image } = await parseJsonBody(req);
-        const resolved = resolveUsername(username);
+        const auth = getSessionFromRequest(req, parsedUrl);
+        const resolved = (auth && auth.username) ? auth.username : resolveUsername(username);
 
         if (!resolved) {
           res.writeHead(404);
@@ -2864,6 +2923,19 @@ const server = http.createServer(async (req, res) => {
         let avatarUrl = null;
         if (!image) {
           DB.setUserAvatar(resolved, null);
+        } else if (typeof image === 'string' && (image.startsWith('http://') || image.startsWith('https://') || image.startsWith('/api/uploads/'))) {
+          // Direct web or API image URL (e.g. Dicebear avatar URL)
+          avatarUrl = image;
+          DB.setUserAvatar(resolved, avatarUrl);
+        } else if (typeof image === 'string' && image.startsWith('data:image/svg+xml')) {
+          try {
+            const diskFile = await saveBase64Media(image, 'avatars', `${resolved}.svg`, 'image/svg+xml');
+            avatarUrl = diskFile.url;
+            DB.setUserAvatar(resolved, avatarUrl);
+          } catch (_) {
+            avatarUrl = image;
+            DB.setUserAvatar(resolved, avatarUrl);
+          }
         } else {
           try {
             const diskFile = await saveBase64Media(image, 'avatars', `${resolved}.jpg`, 'image/jpeg');
@@ -2875,7 +2947,13 @@ const server = http.createServer(async (req, res) => {
           }
         }
 
-        // Notify contacts the avatar changed
+        const updatedUser = DB.getUser(resolved);
+
+        // Broadcast to all connected clients & friends
+        broadcastToAll('directory_updated', {
+          updatedUser: updatedUser
+        });
+
         const myFriends = DB.getFriends(resolved);
         for (const f of myFriends) {
           broadcastToUser(f, 'user_online', {
@@ -2883,48 +2961,59 @@ const server = http.createServer(async (req, res) => {
             online: true,
             avatarImage: avatarUrl
           });
+          broadcastToUser(f, 'user_updated', {
+            user: updatedUser
+          });
         }
 
         return res.end(JSON.stringify({
           success: true,
-          avatarImage: avatarUrl
+          avatarImage: avatarUrl,
+          user: updatedUser
         }));
       }
 
       // 24. Display Name Update
       if (pathname === '/api/users/display-name' && req.method === 'POST') {
         const { username, displayName } = await parseJsonBody(req);
-        const resolved = resolveUsername(username);
+        const auth = getSessionFromRequest(req, parsedUrl);
+        const resolved = (auth && auth.username) ? auth.username : resolveUsername(username);
 
         if (!resolved) {
           res.writeHead(404);
           return res.end(JSON.stringify({ error: 'User not found' }));
         }
 
-        const cleanName = (displayName || '').trim().slice(0, 30);
+        const cleanName = (displayName || '').trim().slice(0, 40);
         if (!cleanName) {
           res.writeHead(400);
           return res.end(JSON.stringify({ error: 'Display name cannot be empty' }));
         }
 
         DB.setUserDisplayName(resolved, cleanName);
+        const updatedUser = DB.getUser(resolved);
+
         broadcastToAll('directory_updated', {
-          updatedUser: {
-            username: resolved,
-            displayName: cleanName
-          }
+          updatedUser: updatedUser
         });
+
+        const myFriends = DB.getFriends(resolved);
+        for (const f of myFriends) {
+          broadcastToUser(f, 'user_updated', { user: updatedUser });
+        }
 
         return res.end(JSON.stringify({
           success: true,
-          displayName: cleanName
+          displayName: cleanName,
+          user: updatedUser
         }));
       }
 
-      // 24b. Student Profile Update (Display Name & Major)
+      // 24b. Unified Student Profile Update (Display Name, Major, Campus, Bio, Avatar Color, Photo)
       if (pathname === '/api/users/profile' && req.method === 'POST') {
-        const { username, displayName, major } = await parseJsonBody(req);
-        const resolved = resolveUsername(username);
+        const body = await parseJsonBody(req);
+        const auth = getSessionFromRequest(req, parsedUrl);
+        const resolved = (auth && auth.username) ? auth.username : resolveUsername(body.username);
 
         if (!resolved) {
           res.writeHead(404);
@@ -2932,25 +3021,52 @@ const server = http.createServer(async (req, res) => {
         }
 
         const user = DB.getUser(resolved);
-        const cleanName = displayName ? displayName.trim().slice(0, 30) : (user ? user.displayName : resolved);
-        if (displayName !== undefined && cleanName) {
-          DB.setUserDisplayName(resolved, cleanName);
+        if (!user) {
+          res.writeHead(404);
+          return res.end(JSON.stringify({ error: 'User record not found in system' }));
         }
 
-        const cleanMajor = major ? major.trim().slice(0, 50) : (user ? user.major : 'Okanagan College');
-        if (major !== undefined && cleanMajor) {
-          DB.setUserMajor(resolved, cleanMajor);
-        }
-
-        const updatedUser = DB.getUser(resolved);
-
-        broadcastToAll('directory_updated', {
-          updatedUser: {
-            username: resolved,
-            displayName: updatedUser.displayName,
-            major: updatedUser.major
+        // Process avatarImage if it's a data URL
+        let processedAvatarImage = body.avatarImage;
+        if (processedAvatarImage && typeof processedAvatarImage === 'string') {
+          if (processedAvatarImage.startsWith('http://') || processedAvatarImage.startsWith('https://') || processedAvatarImage.startsWith('/api/uploads/')) {
+            // Keep URL as-is
+          } else if (processedAvatarImage.startsWith('data:image/svg+xml')) {
+            try {
+              const diskFile = await saveBase64Media(processedAvatarImage, 'avatars', `${resolved}.svg`, 'image/svg+xml');
+              processedAvatarImage = diskFile.url;
+            } catch (_) {}
+          } else if (processedAvatarImage.startsWith('data:')) {
+            try {
+              const diskFile = await saveBase64Media(processedAvatarImage, 'avatars', `${resolved}.jpg`, 'image/jpeg');
+              processedAvatarImage = diskFile.url;
+            } catch (_) {}
           }
+        }
+
+        const updatedUser = DB.updateUserProfile(resolved, {
+          displayName: body.displayName,
+          major: body.major,
+          campus: body.campus,
+          bio: body.bio,
+          avatarColor: body.avatarColor,
+          avatarImage: processedAvatarImage,
+          email: body.email,
+          phone: body.phone,
+          hasOnboarded: body.hasOnboarded
         });
+
+        // Broadcast to ALL clients so directory, friends list, active chats, and group members update in real time
+        broadcastToAll('directory_updated', {
+          updatedUser: updatedUser
+        });
+
+        const myFriends = DB.getFriends(resolved);
+        for (const f of myFriends) {
+          broadcastToUser(f, 'user_updated', {
+            user: updatedUser
+          });
+        }
 
         return res.end(JSON.stringify({
           success: true,

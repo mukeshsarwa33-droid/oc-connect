@@ -679,6 +679,11 @@
       <!-- Text Input Box -->
       <div class="message-input-box" id="message-input-box">
         <textarea id="message-text-input" placeholder="Message..." rows="1"></textarea>
+        <button id="btn-speech-dictation" type="button" class="btn-dictation-mic" title="Voice Dictation (Web Speech API): Speak to type" style="background:none;border:none;cursor:pointer;padding:4px;display:flex;align-items:center;color:#8E8E93;">
+          <svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor" style="pointer-events: none;">
+            <path d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3zm5.91-3c-.49 0-.9.36-.98.85C16.52 14.2 14.47 16 12 16s-4.52-1.8-4.93-4.15c-.08-.49-.49-.85-.98-.85-.61 0-1.09.54-1 1.14.49 3 2.89 5.35 5.91 5.78V20H9c-.55 0-1 .45-1 1s.45 1 1 1h6c.55 0 1-.45 1-1s-.45-1-1-1h-2v-2.08c3.02-.43 5.42-2.78 5.91-5.78.1-.6-.39-1.14-1-1.14z"/>
+          </svg>
+        </button>
       </div>
 
       <!-- Live Voice Recording Bar (shown during recording) -->
@@ -1072,6 +1077,68 @@
     </div>
   </div>
 
+  <!-- FIRST-TIME USER EXPERIENCE (FTUX) ONBOARDING WIZARD -->
+  <div id="modal-onboarding" class="modal-backdrop hidden" style="z-index: 9999;">
+    <div class="modal-card onboarding-modal-card">
+      <div class="onboarding-header">
+        <div class="onboarding-badge-icon">🎓</div>
+        <h2>Welcome to OC Connect!</h2>
+        <p>Set up your Okanagan College student profile so classmates and professors can connect with you.</p>
+      </div>
+
+      <div class="onboarding-body">
+        <!-- Avatar Selection -->
+        <div class="onboarding-avatar-section">
+          <div class="onboarding-avatar-preview-wrap">
+            <div id="onboarding-avatar-preview" class="avatar-circle onboarding-avatar-circle">U</div>
+            <button type="button" id="btn-onboarding-roll-avatar" class="onboarding-dice-btn" title="Roll Random Avatar">🎲</button>
+          </div>
+          <div class="onboarding-avatar-styles-bar">
+            <span class="onboarding-section-subtitle">Pick Avatar Style:</span>
+            <div class="onboarding-styles-grid">
+              <button type="button" class="onboarding-style-chip active" data-style="bottts">🤖 Robots</button>
+              <button type="button" class="onboarding-style-chip" data-style="avataaars">🧑 Casual</button>
+              <button type="button" class="onboarding-style-chip" data-style="identicon">🔷 Geo</button>
+              <button type="button" class="onboarding-style-chip" data-style="fun-emoji">😊 Emoji</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Student Information Form -->
+        <div class="onboarding-fields-group">
+          <div class="onboarding-field">
+            <label for="onboarding-display-name">Your Full Name</label>
+            <input type="text" id="onboarding-display-name" class="onboarding-input" placeholder="e.g. Alex Johnson" maxlength="35">
+          </div>
+
+          <div class="onboarding-field">
+            <label for="onboarding-campus-select">Campus</label>
+            <select id="onboarding-campus-select" class="onboarding-input" style="cursor:pointer; appearance:auto;">
+              <option value="Kelowna Campus (KLO)" selected>📍 Kelowna Campus (KLO)</option>
+              <option value="Vernon Campus">📍 Vernon Campus</option>
+              <option value="Penticton Campus">📍 Penticton Campus</option>
+              <option value="Salmon Arm Campus">📍 Salmon Arm Campus</option>
+            </select>
+          </div>
+
+          <div class="onboarding-field">
+            <label for="onboarding-major-input">Program / Major</label>
+            <input type="text" id="onboarding-major-input" class="onboarding-input" placeholder="e.g. Computer Information Systems (CIS)" maxlength="50">
+          </div>
+
+          <div class="onboarding-field">
+            <label for="onboarding-bio-input">About / Status</label>
+            <input type="text" id="onboarding-bio-input" class="onboarding-input" placeholder="e.g. Excited for new classes • At KLO library 📚" maxlength="120">
+          </div>
+        </div>
+
+        <button id="btn-submit-onboarding" type="button" class="btn-onboarding-continue">
+          <span>Complete Setup & Start Chatting 🚀</span>
+        </button>
+      </div>
+    </div>
+  </div>
+
   <!-- SETTINGS / MY PROFILE MODAL -->
   <div id="modal-settings" class="modal-backdrop hidden">
     <div class="modal-card settings-modal-card">
@@ -1109,6 +1176,9 @@
             <button id="btn-generate-avatar" class="btn-dicebear-pill" title="Generate creative avatar (Dicebear API)">
               <span>🎲 Generate Avatar</span>
             </button>
+            <button id="btn-share-my-profile" class="btn-dicebear-pill" style="background:rgba(0,122,255,0.12);color:#007AFF;border:1px solid rgba(0,122,255,0.3);" title="Share student profile via Web Share API">
+              <span>📤 Share Profile</span>
+            </button>
             <div id="settings-remove-photo-btn-wrap" class="hidden">
               <button id="btn-remove-avatar" class="btn-pill-subtle-danger">Remove</button>
             </div>
@@ -1127,8 +1197,21 @@
               <span class="settings-field-desc">Shown in group chats & campus channels</span>
             </div>
             <div class="settings-modern-input-box">
-              <input type="text" id="settings-display-name-input" class="settings-clean-input" placeholder="Your name" maxlength="30">
+              <input type="text" id="settings-display-name-input" class="settings-clean-input" placeholder="Your name" maxlength="35">
               <button id="btn-save-display-name" class="btn-settings-save">Save</button>
+            </div>
+          </div>
+
+          <div class="settings-row-divider"></div>
+
+          <div class="settings-row-item">
+            <div class="settings-field-meta">
+              <span class="settings-field-title">Status / About</span>
+              <span class="settings-field-desc">Bio visible to classmates in directory</span>
+            </div>
+            <div class="settings-modern-input-box">
+              <input type="text" id="settings-bio-input" class="settings-clean-input" placeholder="e.g. Studying CIS • At KLO Library 📚" maxlength="120">
+              <button id="btn-save-bio" class="btn-settings-save">Save</button>
             </div>
           </div>
 
@@ -1153,11 +1236,20 @@
             <span>OKANAGAN COLLEGE DETAILS</span>
           </div>
 
-          <div class="settings-read-row">
-            <div class="settings-read-icon">📍</div>
-            <div class="settings-read-meta">
-              <span class="settings-read-label">Campus</span>
-              <span id="settings-campus-val" class="settings-read-value">Kelowna Campus (KLO)</span>
+          <div class="settings-row-item">
+            <div class="settings-field-meta">
+              <span class="settings-field-title">Campus</span>
+              <span class="settings-field-desc">Your primary Okanagan College campus</span>
+            </div>
+            <div class="settings-modern-input-box">
+              <span class="settings-at-sign">📍</span>
+              <select id="settings-campus-select" class="settings-clean-input" style="cursor:pointer; appearance:auto;">
+                <option value="Kelowna Campus (KLO)">Kelowna Campus (KLO)</option>
+                <option value="Vernon Campus">Vernon Campus</option>
+                <option value="Penticton Campus">Penticton Campus</option>
+                <option value="Salmon Arm Campus">Salmon Arm Campus</option>
+              </select>
+              <button id="btn-save-campus" class="btn-settings-save">Save</button>
             </div>
           </div>
 

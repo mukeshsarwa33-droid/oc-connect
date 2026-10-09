@@ -59,17 +59,50 @@ function saveBase64Media(dataUrl, category = 'documents', originalName = '', mim
     }
 
     try {
-      let base64Data = dataUrl;
+      let buffer;
       let detectedMime = mimeType || 'application/octet-stream';
 
-      const match = dataUrl.match(/^data:([^;]+);base64,(.+)$/);
-      if (match) {
-        detectedMime = match[1] || detectedMime;
-        base64Data = match[2];
+      const base64Match = dataUrl.match(/^data:([^;]+);base64,(.+)$/s);
+      const utf8SvgMatch = dataUrl.match(/^data:image\/svg\+xml;utf8,(.+)$/s);
+
+      if (base64Match) {
+        detectedMime = base64Match[1] || detectedMime;
+        buffer = Buffer.from(base64Match[2], 'base64');
+      } else if (utf8SvgMatch) {
+        detectedMime = 'image/svg+xml';
+        const decoded = decodeURIComponent(utf8SvgMatch[1]);
+        buffer = Buffer.from(decoded, 'utf8');
+      } else if (dataUrl.startsWith('data:')) {
+        const commaIdx = dataUrl.indexOf(',');
+        if (commaIdx !== -1) {
+          const meta = dataUrl.substring(5, commaIdx);
+          const raw = dataUrl.substring(commaIdx + 1);
+          if (meta.includes(';base64')) {
+            detectedMime = meta.replace(';base64', '') || detectedMime;
+            buffer = Buffer.from(raw, 'base64');
+          } else {
+            detectedMime = meta || detectedMime;
+            buffer = Buffer.from(decodeURIComponent(raw), 'utf8');
+          }
+        } else {
+          buffer = Buffer.from(dataUrl, 'utf8');
+        }
+      } else {
+        // Raw base64 or string fallback
+        buffer = Buffer.from(dataUrl, 'base64');
       }
 
-      const buffer = Buffer.from(base64Data, 'base64');
-      const ext = path.extname(originalName).toLowerCase() || (detectedMime.includes('pdf') ? '.pdf' : (detectedMime.includes('png') ? '.png' : (detectedMime.includes('webm') ? '.webm' : '.jpg')));
+      let ext = path.extname(originalName).toLowerCase();
+      if (!ext) {
+        if (detectedMime.includes('svg')) ext = '.svg';
+        else if (detectedMime.includes('png')) ext = '.png';
+        else if (detectedMime.includes('webp')) ext = '.webp';
+        else if (detectedMime.includes('pdf')) ext = '.pdf';
+        else if (detectedMime.includes('webm')) ext = '.webm';
+        else if (detectedMime.includes('ogg')) ext = '.ogg';
+        else ext = '.jpg';
+      }
+
       const safeBaseName = path.basename(originalName, ext).replace(/[^a-zA-Z0-9_-]/g, '_').slice(0, 30);
       const uniqueName = `${category.slice(0, 3)}_${Date.now()}_${Math.random().toString(36).slice(2, 7)}${safeBaseName ? '_' + safeBaseName : ''}${ext}`;
       

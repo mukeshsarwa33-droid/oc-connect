@@ -205,6 +205,9 @@ db.exec(`
 // Safe column migrations for existing databases
 try { db.exec("ALTER TABLE users ADD COLUMN email TEXT;"); } catch(_) {}
 try { db.exec("ALTER TABLE users ADD COLUMN phone TEXT;"); } catch(_) {}
+try { db.exec("ALTER TABLE users ADD COLUMN bio TEXT DEFAULT '';"); } catch(_) {}
+try { db.exec("ALTER TABLE users ADD COLUMN campus TEXT DEFAULT 'Kelowna Campus (KLO)';"); } catch(_) {}
+try { db.exec("ALTER TABLE users ADD COLUMN has_onboarded INTEGER DEFAULT 0;"); } catch(_) {}
 try { db.exec("ALTER TABLE messages ADD COLUMN reply_to_json TEXT;"); } catch(_) {}
 try { db.exec("ALTER TABLE messages ADD COLUMN is_pinned INTEGER DEFAULT 0;"); } catch(_) {}
 
@@ -216,15 +219,18 @@ const stmts = {
   getUserByPhone: db.prepare('SELECT * FROM users WHERE phone = ? LIMIT 1'),
   getUserByPhoneAndOcId: db.prepare("SELECT * FROM users WHERE phone = ? AND (oc_id = ? OR oc_id LIKE (? || '_%')) LIMIT 1"),
   insertUser: db.prepare(`
-    INSERT INTO users (username, oc_id, display_name, major, avatar_color, avatar_image, email, phone, online, last_seen, created_at, is_demo, is_trusted)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    INSERT INTO users (username, oc_id, display_name, major, avatar_color, avatar_image, email, phone, online, last_seen, created_at, is_demo, is_trusted, bio, campus, has_onboarded)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     ON CONFLICT(username) DO UPDATE SET
-      display_name = excluded.display_name,
-      major = excluded.major,
-      avatar_color = excluded.avatar_color,
-      avatar_image = excluded.avatar_image,
+      display_name = COALESCE(excluded.display_name, users.display_name),
+      major = COALESCE(excluded.major, users.major),
+      avatar_color = COALESCE(excluded.avatar_color, users.avatar_color),
+      avatar_image = COALESCE(excluded.avatar_image, users.avatar_image),
       email = COALESCE(excluded.email, users.email),
       phone = COALESCE(excluded.phone, users.phone),
+      bio = COALESCE(excluded.bio, users.bio),
+      campus = COALESCE(excluded.campus, users.campus),
+      has_onboarded = COALESCE(excluded.has_onboarded, users.has_onboarded),
       online = excluded.online,
       last_seen = excluded.last_seen
   `),
@@ -232,6 +238,23 @@ const stmts = {
   updateDisplayName: db.prepare('UPDATE users SET display_name = ? WHERE username = ?'),
   updateMajor: db.prepare('UPDATE users SET major = ? WHERE username = ?'),
   updateAvatar: db.prepare('UPDATE users SET avatar_image = ? WHERE username = ?'),
+  updateAvatarColor: db.prepare('UPDATE users SET avatar_color = ? WHERE username = ?'),
+  updateBio: db.prepare('UPDATE users SET bio = ? WHERE username = ?'),
+  updateCampus: db.prepare('UPDATE users SET campus = ? WHERE username = ?'),
+  updateHasOnboarded: db.prepare('UPDATE users SET has_onboarded = ? WHERE username = ?'),
+  updateUserProfile: db.prepare(`
+    UPDATE users SET
+      display_name = COALESCE(?, display_name),
+      major = COALESCE(?, major),
+      campus = COALESCE(?, campus),
+      bio = COALESCE(?, bio),
+      avatar_color = COALESCE(?, avatar_color),
+      avatar_image = CASE WHEN ? = '__REMOVE__' THEN NULL WHEN ? IS NOT NULL THEN ? ELSE avatar_image END,
+      email = COALESCE(?, email),
+      phone = COALESCE(?, phone),
+      has_onboarded = COALESCE(?, has_onboarded)
+    WHERE username = ?
+  `),
   
   // Friends
   getFriends: db.prepare(`
@@ -313,9 +336,9 @@ const stmts = {
 
   // Directory Search
   searchStudents: db.prepare(`
-    SELECT username, display_name, major, avatar_color, avatar_image, online, last_seen
+    SELECT username, oc_id, display_name, major, campus, bio, avatar_color, avatar_image, email, phone, online, last_seen, created_at, is_demo, is_trusted, has_onboarded
     FROM users
-    WHERE username != ? AND (username LIKE ? OR display_name LIKE ?)
+    WHERE username != ? AND (username LIKE ? OR display_name LIKE ? OR major LIKE ? OR campus LIKE ?)
     ORDER BY online DESC, display_name ASC
     LIMIT ?
   `),
@@ -430,10 +453,13 @@ function formatUserRecord(row) {
     ocId: row.oc_id,
     displayName: row.display_name,
     major: row.major || 'Okanagan College',
+    campus: row.campus || 'Kelowna Campus (KLO)',
+    bio: row.bio || '',
     email: row.email || null,
     phone: row.phone || null,
     avatarColor: row.avatar_color,
     avatarImage: row.avatar_image || null,
+    hasOnboarded: Boolean(row.has_onboarded),
     online: Boolean(row.online),
     lastSeen: row.last_seen || Date.now(),
     createdAt: row.created_at || Date.now(),
@@ -528,6 +554,9 @@ const DB = {
     const cleanOcId = (user.ocId || cleanUsername).trim().toLowerCase();
     const cleanEmail = user.email ? user.email.trim().toLowerCase() : null;
     const cleanPhone = user.phone ? user.phone.replace(/[^0-9]/g, '') : null;
+    const cleanBio = user.bio !== undefined ? user.bio : '';
+    const cleanCampus = user.campus || 'Kelowna Campus (KLO)';
+    const hasOnboarded = user.hasOnboarded ? 1 : 0;
 
     const existingUser = this.getUser(cleanUsername);
     if (existingUser) {
@@ -537,14 +566,17 @@ const DB = {
         user.displayName || existingUser.displayName || cleanUsername,
         user.major || existingUser.major || 'Okanagan College',
         user.avatarColor || existingUser.avatarColor || '#007AFF',
-        user.avatarImage || existingUser.avatarImage || null,
+        user.avatarImage !== undefined ? user.avatarImage : existingUser.avatarImage,
         cleanEmail || existingUser.email || null,
         cleanPhone || existingUser.phone || null,
         user.online ? 1 : 0,
         user.lastSeen || Date.now(),
         existingUser.createdAt || Date.now(),
         user.isDemo ? 1 : 0,
-        user.isTrusted ? 1 : 0
+        user.isTrusted ? 1 : 0,
+        cleanBio || existingUser.bio || '',
+        cleanCampus || existingUser.campus || 'Kelowna Campus (KLO)',
+        user.hasOnboarded !== undefined ? (user.hasOnboarded ? 1 : 0) : (existingUser.hasOnboarded ? 1 : 0)
       );
       return this.getUser(cleanUsername);
     }
@@ -565,7 +597,10 @@ const DB = {
       user.lastSeen || Date.now(),
       user.createdAt || Date.now(),
       user.isDemo ? 1 : 0,
-      user.isTrusted ? 1 : 0
+      user.isTrusted ? 1 : 0,
+      cleanBio,
+      cleanCampus,
+      hasOnboarded
     );
     return this.getUser(cleanUsername);
   },
@@ -685,6 +720,62 @@ const DB = {
   setUserAvatar(username, avatarImage) {
     const clean = username.trim().toLowerCase().replace(/^@/, '');
     stmts.updateAvatar.run(avatarImage || null, clean);
+  },
+
+  setUserAvatarColor(username, avatarColor) {
+    const clean = username.trim().toLowerCase().replace(/^@/, '');
+    stmts.updateAvatarColor.run(avatarColor, clean);
+  },
+
+  setUserBio(username, bio) {
+    const clean = username.trim().toLowerCase().replace(/^@/, '');
+    stmts.updateBio.run(bio || '', clean);
+  },
+
+  setUserCampus(username, campus) {
+    const clean = username.trim().toLowerCase().replace(/^@/, '');
+    stmts.updateCampus.run(campus || 'Kelowna Campus (KLO)', clean);
+  },
+
+  setUserHasOnboarded(username, hasOnboarded) {
+    const clean = username.trim().toLowerCase().replace(/^@/, '');
+    stmts.updateHasOnboarded.run(hasOnboarded ? 1 : 0, clean);
+  },
+
+  updateUserProfile(username, data) {
+    const clean = (username || '').trim().toLowerCase().replace(/^@/, '');
+    const user = this.getUser(clean);
+    if (!user) return null;
+
+    if (data.displayName !== undefined && data.displayName !== null) {
+      this.setUserDisplayName(clean, data.displayName.trim().slice(0, 40));
+    }
+    if (data.major !== undefined && data.major !== null) {
+      this.setUserMajor(clean, data.major.trim().slice(0, 60));
+    }
+    if (data.campus !== undefined && data.campus !== null) {
+      this.setUserCampus(clean, data.campus.trim().slice(0, 50));
+    }
+    if (data.bio !== undefined && data.bio !== null) {
+      this.setUserBio(clean, data.bio.trim().slice(0, 160));
+    }
+    if (data.avatarColor !== undefined && data.avatarColor !== null) {
+      this.setUserAvatarColor(clean, data.avatarColor);
+    }
+    if (data.avatarImage !== undefined) {
+      this.setUserAvatar(clean, data.avatarImage);
+    }
+    if (data.hasOnboarded !== undefined) {
+      this.setUserHasOnboarded(clean, data.hasOnboarded);
+    }
+    if (data.email !== undefined && data.email) {
+      db.prepare('UPDATE users SET email = ? WHERE username = ?').run(data.email.trim().toLowerCase(), clean);
+    }
+    if (data.phone !== undefined && data.phone) {
+      db.prepare('UPDATE users SET phone = ? WHERE username = ?').run(data.phone.replace(/[^0-9]/g, ''), clean);
+    }
+
+    return this.getUser(clean);
   },
 
   renameUser(oldUsername, newUsername, newDisplayName) {
@@ -1038,7 +1129,7 @@ const DB = {
   searchStudents(me, query, limit = 50) {
     const meClean = (me || '').trim().toLowerCase().replace(/^@/, '');
     const cleanQ = `%${(query || '').trim().toLowerCase().replace(/^@/, '')}%`;
-    const rows = stmts.searchStudents.all(meClean, cleanQ, cleanQ, limit);
+    const rows = stmts.searchStudents.all(meClean, cleanQ, cleanQ, cleanQ, cleanQ, limit);
     return rows.map(formatUserRecord);
   },
 
