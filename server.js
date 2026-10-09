@@ -305,12 +305,16 @@ const server = http.createServer(async (req, res) => {
       // 1. Auth: Request One-Time OTP (Student Email OR Phone + Student ID)
       if (pathname === '/api/auth/request-otp' && req.method === 'POST') {
         const { mode, method, email, phone, ocId, fullName, username, major } = await parseJsonBody(req);
-        const clientIp = req.headers['x-forwarded-for'] || req.socket.remoteAddress || '127.0.0.1';
-        
-        // Rate limit check: max 6 OTP requests per 10 minutes per IP
-        if (!checkOtpRateLimit(clientIp, 6, 10 * 60 * 1000)) {
+        // Rate limit check: Keyed by student identifier to support shared campus Wi-Fi NAT IPs
+        const rateKey = (email || `${phone}_${ocId}` || clientIp).trim().toLowerCase();
+        if (!checkOtpRateLimit(`id_${rateKey}`, 5, 5 * 60 * 1000)) {
           res.writeHead(429);
-          return res.end(JSON.stringify({ error: 'Too many OTP requests. Please wait a few minutes before trying again.' }));
+          return res.end(JSON.stringify({ error: 'Too many OTP requests for this student account. Please wait 5 minutes.' }));
+        }
+        // Campus IP safety ceiling: allows up to 120 concurrent signups from a shared classroom gateway
+        if (!checkOtpRateLimit(`ip_${clientIp}`, 120, 10 * 60 * 1000)) {
+          res.writeHead(429);
+          return res.end(JSON.stringify({ error: 'Too many campus requests. Please wait a moment before trying again.' }));
         }
 
         const authMethod = method === 'phone_id' ? 'phone_id' : 'email';
@@ -928,8 +932,8 @@ const server = http.createServer(async (req, res) => {
           return res.end(JSON.stringify({ success: true, message: 'Already friends' }));
         }
 
-        // Rate limit: max 10 friend requests per user per hour
-        if (!checkActionRateLimit('friends_req', resolvedFrom, 10, 60 * 60 * 1000)) {
+        // Rate limit: max 60 friend requests per user per hour (supports classroom demo cohorts)
+        if (!checkActionRateLimit('friends_req', resolvedFrom, 60, 60 * 60 * 1000)) {
           res.writeHead(429);
           return res.end(JSON.stringify({ error: 'Too many friend requests sent. Please wait before sending more.' }));
         }
