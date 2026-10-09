@@ -248,6 +248,12 @@
               <line x1="12" y1="2" x2="12" y2="15"/>
             </svg>
           </button>
+          <button id="btn-open-friend-requests" type="button" class="icon-btn" title="Pending Friend Requests" style="position:relative;">
+            <svg viewBox="0 0 24 24" width="21" height="21" fill="none" stroke="#FF2D55" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="pointer-events:none;">
+              <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"></path>
+            </svg>
+            <span id="header-requests-badge" class="badge-count" style="position:absolute;top:-4px;right:-4px;font-size:10px;padding:1px 5px;display:none;background:#FF3B30;color:white;border-radius:10px;border:1.5px solid white;">0</span>
+          </button>
           <div class="user-chip" id="user-chip-btn" title="My Profile & Settings" style="cursor:pointer">
             <span id="current-user-avatar" class="avatar-sm">U</span>
             <span id="current-user-handle">@username</span>
@@ -906,6 +912,55 @@
         <div class="share-instructions">
           <p>✔️ Works on <strong>any device</strong> (iPhone Safari, Android Chrome, Mac, Windows, iPads).</p>
           <p>✔️ Enter using OC Student ID and code <strong>123456</strong>.</p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- INSTAGRAM-STYLE FRIEND REQUESTS MODAL -->
+  <div id="modal-friend-requests" class="modal-backdrop hidden">
+    <div class="modal-card ig-requests-card">
+      <div class="ios-sheet-handle"></div>
+      <div class="modal-header ig-requests-header">
+        <button id="btn-close-ig-requests" class="btn-back-ios">
+          <svg viewBox="0 0 24 24" width="20" height="20" fill="#007AFF"><path d="M15.41 7.41L14 6l-6 6 6 6 1.41-1.41L10.83 12z"/></svg>
+          <span class="back-text">Done</span>
+        </button>
+        <h3>Friend Requests</h3>
+        <div style="width:40px"></div>
+      </div>
+
+      <!-- Instagram Tabs: Received vs Sent -->
+      <div class="ig-requests-tabs-bar">
+        <button type="button" class="ig-subtab-btn active" id="ig-tab-received">
+          <span>Received</span>
+          <span id="ig-received-badge" class="ig-badge-pill hidden">0</span>
+        </button>
+        <button type="button" class="ig-subtab-btn" id="ig-tab-sent">
+          <span>Sent</span>
+          <span id="ig-sent-badge" class="ig-badge-pill hidden">0</span>
+        </button>
+      </div>
+
+      <div class="modal-body ig-requests-body">
+        <!-- Incoming Requests List -->
+        <div id="ig-incoming-list" class="ig-requests-list">
+          <!-- Dynamic Instagram-styled request cards -->
+        </div>
+        <div id="ig-no-incoming" class="empty-placeholder hidden" style="padding:48px 16px;text-align:center;">
+          <div style="font-size:42px;margin-bottom:10px;">📬</div>
+          <h4 style="margin:0 0 6px 0;font-size:16px;font-weight:600;">No Friend Requests</h4>
+          <p style="margin:0;font-size:13px;color:var(--text-muted);">When classmates request to connect with you, they'll show up here.</p>
+        </div>
+
+        <!-- Outgoing Requests List -->
+        <div id="ig-outgoing-list" class="ig-requests-list hidden">
+          <!-- Dynamic outgoing request cards -->
+        </div>
+        <div id="ig-no-outgoing" class="empty-placeholder hidden" style="padding:48px 16px;text-align:center;">
+          <div style="font-size:42px;margin-bottom:10px;">📤</div>
+          <h4 style="margin:0 0 6px 0;font-size:16px;font-weight:600;">No Sent Requests</h4>
+          <p style="margin:0;font-size:13px;color:var(--text-muted);">You have no pending outgoing requests.</p>
         </div>
       </div>
     </div>

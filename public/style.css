@@ -7411,3 +7411,220 @@ button:active {
   border-color: #38383A;
 }
 
+/* Instagram-Style Friend Requests Modal & Cards */
+.ig-requests-card {
+  max-width: 500px;
+  width: 100%;
+  border-radius: 20px 20px 0 0;
+  max-height: 85vh;
+  display: flex;
+  flex-direction: column;
+}
+
+@media (min-width: 600px) {
+  .ig-requests-card {
+    border-radius: 20px;
+    max-height: 80vh;
+  }
+}
+
+.ig-requests-header {
+  padding: 14px 16px;
+  border-bottom: 0.5px solid var(--ios-separator);
+}
+
+.ig-requests-tabs-bar {
+  display: flex;
+  background: var(--bg-secondary, #F2F2F7);
+  padding: 4px;
+  margin: 12px 16px 8px 16px;
+  border-radius: 12px;
+  gap: 4px;
+}
+
+.ig-subtab-btn {
+  flex: 1;
+  padding: 8px 12px;
+  font-size: 13.5px;
+  font-weight: 600;
+  border: none;
+  background: transparent;
+  color: var(--text-muted, #8E8E93);
+  border-radius: 8px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  transition: all 0.2s ease;
+}
+
+.ig-subtab-btn.active {
+  background: var(--bg-card, #FFFFFF);
+  color: var(--text-dark, #000000);
+  box-shadow: 0 1px 4px rgba(0,0,0,0.08);
+}
+
+.ig-badge-pill {
+  background: #FF3B30;
+  color: white;
+  font-size: 11px;
+  padding: 1px 6px;
+  border-radius: 10px;
+  font-weight: 700;
+}
+
+.ig-badge-pill.hidden {
+  display: none;
+}
+
+.ig-requests-body {
+  padding: 8px 16px 24px 16px;
+  overflow-y: auto;
+  flex: 1;
+}
+
+.ig-requests-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.ig-request-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 12px;
+  background: var(--bg-card, #FFFFFF);
+  border-radius: 14px;
+  border: 0.5px solid var(--ios-border, rgba(0,0,0,0.08));
+  box-shadow: 0 1px 3px rgba(0,0,0,0.03);
+  transition: opacity 0.25s ease, transform 0.25s ease;
+}
+
+.ig-request-avatar {
+  width: 46px;
+  height: 46px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 18px;
+  font-weight: 700;
+  color: white;
+  position: relative;
+  flex-shrink: 0;
+}
+
+.ig-request-avatar img {
+  width: 100%;
+  height: 100%;
+  border-radius: 50%;
+  object-fit: cover;
+}
+
+.ig-request-details {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.ig-request-name {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-dark, #000000);
+  line-height: 1.2;
+}
+
+.ig-request-handle {
+  font-size: 12px;
+  color: var(--text-light, #8E8E93);
+}
+
+.ig-request-major {
+  font-size: 11.5px;
+  color: var(--text-muted, #666666);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.ig-request-buttons {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+.btn-ig-confirm {
+  background: #0095F6;
+  color: white;
+  border: none;
+  font-size: 13px;
+  font-weight: 600;
+  padding: 7px 16px;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: opacity 0.15s ease, background 0.2s ease;
+}
+
+.btn-ig-confirm:hover {
+  opacity: 0.92;
+}
+
+.btn-ig-delete {
+  background: var(--bg-hover, #EFEFEF);
+  color: var(--text-dark, #000000);
+  border: none;
+  font-size: 13px;
+  font-weight: 600;
+  padding: 7px 14px;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: opacity 0.15s ease;
+}
+
+.btn-ig-delete:hover {
+  background: #E5E5EA;
+}
+
+.btn-ig-confirmed {
+  background: #34C759 !important;
+  color: white !important;
+  pointer-events: none;
+}
+
+.btn-ig-cancel {
+  background: var(--bg-hover, #EFEFEF);
+  color: #FF3B30;
+  border: none;
+  font-size: 12px;
+  font-weight: 600;
+  padding: 6px 12px;
+  border-radius: 8px;
+  cursor: pointer;
+}
+
+[data-theme="dark"] .ig-request-item {
+  background: #1C1C1E;
+  border-color: #2C2C2E;
+}
+
+[data-theme="dark"] .ig-requests-tabs-bar {
+  background: #2C2C2E;
+}
+
+[data-theme="dark"] .ig-subtab-btn.active {
+  background: #3A3A3C;
+  color: #FFFFFF;
+}
+
+[data-theme="dark"] .btn-ig-delete,
+[data-theme="dark"] .btn-ig-cancel {
+  background: #2C2C2E;
+  color: #FFFFFF;
+}
+
+

@@ -3052,7 +3052,46 @@ function updateFriendsOnlineCount() {
   el.friendsOnlineCount.textContent = `${onlineCount} online`;
 }
 
-// LOAD FRIEND REQUESTS SECTION (INCOMING & OUTGOING)
+// LOAD FRIEND REQUESTS SECTION (INCOMING & OUTGOING — INSTAGRAM STYLE)
+let currentIgTab = 'received';
+
+function switchIgRequestsTab(tab) {
+  currentIgTab = tab;
+  const tabRec = document.getElementById('ig-tab-received');
+  const tabSent = document.getElementById('ig-tab-sent');
+  const listIncoming = document.getElementById('ig-incoming-list');
+  const noIncoming = document.getElementById('ig-no-incoming');
+  const listOutgoing = document.getElementById('ig-outgoing-list');
+  const noOutgoing = document.getElementById('ig-no-outgoing');
+
+  const hasIncoming = state.incomingRequests && state.incomingRequests.length > 0;
+  const hasOutgoing = state.outgoingRequests && state.outgoingRequests.length > 0;
+
+  if (tab === 'received') {
+    if (tabRec) tabRec.classList.add('active');
+    if (tabSent) tabSent.classList.remove('active');
+    if (listIncoming) listIncoming.classList.toggle('hidden', !hasIncoming);
+    if (noIncoming) noIncoming.classList.toggle('hidden', hasIncoming);
+    if (listOutgoing) listOutgoing.classList.add('hidden');
+    if (noOutgoing) noOutgoing.classList.add('hidden');
+  } else {
+    if (tabSent) tabSent.classList.add('active');
+    if (tabRec) tabRec.classList.remove('active');
+    if (listOutgoing) listOutgoing.classList.toggle('hidden', !hasOutgoing);
+    if (noOutgoing) noOutgoing.classList.toggle('hidden', hasOutgoing);
+    if (listIncoming) listIncoming.classList.add('hidden');
+    if (noIncoming) noIncoming.classList.add('hidden');
+  }
+}
+
+function openFriendRequestsModal(tab = 'received') {
+  const modal = document.getElementById('modal-friend-requests');
+  if (!modal) return;
+  switchIgRequestsTab(tab);
+  openModal(modal);
+  loadFriendRequests();
+}
+
 async function loadFriendRequests() {
   if (!state.currentUser) return;
   try {
@@ -3067,22 +3106,33 @@ async function loadFriendRequests() {
     if (el.requestsBadge) el.requestsBadge.textContent = incomingCount;
     if (el.outgoingRequestsCount) el.outgoingRequestsCount.textContent = outgoingCount;
 
+    // Header badge (Instagram Heart / Activity Alert)
+    const headerReqBadge = document.getElementById('header-requests-badge');
+    if (headerReqBadge) {
+      headerReqBadge.textContent = incomingCount;
+      headerReqBadge.style.display = incomingCount > 0 ? 'inline-block' : 'none';
+    }
+
+    // Instagram modal badges
+    const igRecBadge = document.getElementById('ig-received-badge');
+    if (igRecBadge) {
+      igRecBadge.textContent = incomingCount;
+      igRecBadge.classList.toggle('hidden', incomingCount === 0);
+    }
+    const igSentBadge = document.getElementById('ig-sent-badge');
+    if (igSentBadge) {
+      igSentBadge.textContent = outgoingCount;
+      igSentBadge.classList.toggle('hidden', outgoingCount === 0);
+    }
+
     if (el.requestsSubtabBadge) {
       el.requestsSubtabBadge.textContent = incomingCount;
-      if (incomingCount > 0) {
-        el.requestsSubtabBadge.classList.remove('hidden');
-      } else {
-        el.requestsSubtabBadge.classList.add('hidden');
-      }
+      el.requestsSubtabBadge.classList.toggle('hidden', incomingCount === 0);
     }
 
     if (el.friendsRequestsTabBadge) {
       el.friendsRequestsTabBadge.textContent = incomingCount;
-      if (incomingCount > 0) {
-        el.friendsRequestsTabBadge.classList.remove('hidden');
-      } else {
-        el.friendsRequestsTabBadge.classList.add('hidden');
-      }
+      el.friendsRequestsTabBadge.classList.toggle('hidden', incomingCount === 0);
     }
 
     const quickReqBadge = document.getElementById('quick-requests-badge');
@@ -3099,80 +3149,187 @@ async function loadFriendRequests() {
 }
 
 function renderFriendRequests(requests) {
-  if (!el.friendRequestsList) return;
-  el.friendRequestsList.innerHTML = '';
+  const igList = document.getElementById('ig-incoming-list');
+  const igNoIncoming = document.getElementById('ig-no-incoming');
 
-  if (!requests || requests.length === 0) {
-    if (el.noFriendRequestsPlaceholder) el.noFriendRequestsPlaceholder.classList.remove('hidden');
-    return;
+  if (el.friendRequestsList) el.friendRequestsList.innerHTML = '';
+  if (igList) igList.innerHTML = '';
+
+  const isEmpty = !requests || requests.length === 0;
+
+  if (el.noFriendRequestsPlaceholder) {
+    el.noFriendRequestsPlaceholder.classList.toggle('hidden', !isEmpty);
+  }
+  if (currentIgTab === 'received') {
+    if (igNoIncoming) igNoIncoming.classList.toggle('hidden', !isEmpty);
+    if (igList) igList.classList.toggle('hidden', isEmpty);
+  } else {
+    if (igNoIncoming) igNoIncoming.classList.add('hidden');
+    if (igList) igList.classList.add('hidden');
   }
 
-  if (el.noFriendRequestsPlaceholder) el.noFriendRequestsPlaceholder.classList.add('hidden');
+  if (isEmpty) return;
 
   requests.forEach(r => {
-    const card = document.createElement('div');
-    card.className = 'request-card';
-    card.innerHTML = `
-      <div class="avatar-circle" style="width:42px;height:42px;font-size:15px;background-color:${r.avatarColor || '#075E54'}">
-        ${(r.fromName || r.from).charAt(0).toUpperCase()}
-      </div>
-      <div class="request-info">
-        <div class="request-name">${escapeHtml(r.fromName || r.from)} <small style="color:var(--text-light);font-weight:normal">@${escapeHtml(r.from)}</small></div>
-        <div class="request-major">${escapeHtml(r.major || 'Okanagan College')}</div>
-      </div>
-      <div class="request-actions">
-        <button class="btn-accept-request" data-from="${r.from}" data-id="${r.id || ''}">✓ Accept</button>
-        <button class="btn-decline-request" data-from="${r.from}" data-id="${r.id || ''}">✕</button>
-      </div>
-    `;
+    const avatarLetter = (r.fromName || r.from || 'U').charAt(0).toUpperCase();
+    const avatarBg = r.avatarColor || '#075E54';
+    const avatarImgHtml = r.avatarImage ? `<img src="${r.avatarImage}" alt="${escapeHtml(r.fromName || r.from)}">` : avatarLetter;
 
-    card.querySelector('.btn-accept-request').addEventListener('click', (e) => {
-      e.stopPropagation();
-      respondToRequest(r.from, 'accept', r.id);
-    });
+    // 1. Traditional Card (Friends Tab)
+    if (el.friendRequestsList) {
+      const card = document.createElement('div');
+      card.className = 'request-card';
+      card.innerHTML = `
+        <div class="avatar-circle" style="width:42px;height:42px;font-size:15px;background-color:${avatarBg}">
+          ${avatarImgHtml}
+        </div>
+        <div class="request-info">
+          <div class="request-name">${escapeHtml(r.fromName || r.from)} <small style="color:var(--text-light);font-weight:normal">@${escapeHtml(r.from)}</small></div>
+          <div class="request-major">${escapeHtml(r.major || 'Okanagan College')}</div>
+        </div>
+        <div class="request-actions">
+          <button class="btn-accept-request" data-from="${r.from}" data-id="${r.id || ''}">✓ Accept</button>
+          <button class="btn-decline-request" data-from="${r.from}" data-id="${r.id || ''}">✕</button>
+        </div>
+      `;
 
-    card.querySelector('.btn-decline-request').addEventListener('click', (e) => {
-      e.stopPropagation();
-      respondToRequest(r.from, 'decline', r.id);
-    });
+      card.querySelector('.btn-accept-request').addEventListener('click', (e) => {
+        e.stopPropagation();
+        respondToRequest(r.from, 'accept', r.id);
+      });
 
-    el.friendRequestsList.appendChild(card);
+      card.querySelector('.btn-decline-request').addEventListener('click', (e) => {
+        e.stopPropagation();
+        respondToRequest(r.from, 'decline', r.id);
+      });
+
+      el.friendRequestsList.appendChild(card);
+    }
+
+    // 2. Instagram Card (Dedicated Instagram Modal & Drawer)
+    if (igList) {
+      const igItem = document.createElement('div');
+      igItem.className = 'ig-request-item';
+      igItem.id = `ig-req-${r.from}`;
+      igItem.innerHTML = `
+        <div class="ig-request-avatar" style="background-color:${avatarBg}">
+          ${avatarImgHtml}
+        </div>
+        <div class="ig-request-details">
+          <div class="ig-request-name">${escapeHtml(r.fromName || r.from)}</div>
+          <div class="ig-request-handle">@${escapeHtml(r.from)}</div>
+          <div class="ig-request-major">${escapeHtml(r.major || 'Okanagan College')}</div>
+        </div>
+        <div class="ig-request-buttons">
+          <button class="btn-ig-confirm" data-from="${r.from}">Confirm</button>
+          <button class="btn-ig-delete" data-from="${r.from}">Delete</button>
+        </div>
+      `;
+
+      const confirmBtn = igItem.querySelector('.btn-ig-confirm');
+      const deleteBtn = igItem.querySelector('.btn-ig-delete');
+
+      confirmBtn.addEventListener('click', async (e) => {
+        e.stopPropagation();
+        confirmBtn.className = 'btn-ig-confirm btn-ig-confirmed';
+        confirmBtn.textContent = 'Friends ✓';
+        if (deleteBtn) deleteBtn.style.display = 'none';
+        await respondToRequest(r.from, 'accept', r.id);
+      });
+
+      deleteBtn.addEventListener('click', async (e) => {
+        e.stopPropagation();
+        igItem.style.opacity = '0';
+        igItem.style.transform = 'scale(0.95)';
+        setTimeout(() => igItem.remove(), 250);
+        await respondToRequest(r.from, 'decline', r.id);
+      });
+
+      igList.appendChild(igItem);
+    }
   });
 }
 
 function renderOutgoingRequests(outgoing) {
-  if (!el.outgoingRequestsList) return;
-  el.outgoingRequestsList.innerHTML = '';
+  const igOutList = document.getElementById('ig-outgoing-list');
+  const igNoOutgoing = document.getElementById('ig-no-outgoing');
 
-  if (!outgoing || outgoing.length === 0) {
-    if (el.outgoingRequestsSection) el.outgoingRequestsSection.classList.add('hidden');
-    return;
+  if (el.outgoingRequestsList) el.outgoingRequestsList.innerHTML = '';
+  if (igOutList) igOutList.innerHTML = '';
+
+  const isEmpty = !outgoing || outgoing.length === 0;
+
+  if (el.outgoingRequestsSection) {
+    el.outgoingRequestsSection.classList.toggle('hidden', isEmpty);
+  }
+  if (currentIgTab === 'sent') {
+    if (igNoOutgoing) igNoOutgoing.classList.toggle('hidden', !isEmpty);
+    if (igOutList) igOutList.classList.toggle('hidden', isEmpty);
+  } else {
+    if (igNoOutgoing) igNoOutgoing.classList.add('hidden');
+    if (igOutList) igOutList.classList.add('hidden');
   }
 
-  if (el.outgoingRequestsSection) el.outgoingRequestsSection.classList.remove('hidden');
+  if (isEmpty) return;
 
   outgoing.forEach(o => {
-    const card = document.createElement('div');
-    card.className = 'outgoing-request-card';
-    card.innerHTML = `
-      <div class="avatar-circle" style="width:36px;height:36px;font-size:13px;background-color:${o.avatarColor || '#007AFF'}">
-        ${(o.toName || o.to).charAt(0).toUpperCase()}
-      </div>
-      <div class="request-info">
-        <div class="request-name" style="font-size:13px;">${escapeHtml(o.toName || o.to)} <small style="color:var(--text-light)">@${escapeHtml(o.to)}</small></div>
-        <div style="font-size:11px;color:var(--text-muted)">Pending classmate approval</div>
-      </div>
-      <div class="request-actions">
-        <button class="btn-cancel-request" data-to="${o.to}">Cancel</button>
-      </div>
-    `;
+    const avatarLetter = (o.toName || o.to || 'U').charAt(0).toUpperCase();
+    const avatarBg = o.avatarColor || '#007AFF';
+    const avatarImgHtml = o.avatarImage ? `<img src="${o.avatarImage}" alt="${escapeHtml(o.toName || o.to)}">` : avatarLetter;
 
-    card.querySelector('.btn-cancel-request').addEventListener('click', (e) => {
-      e.stopPropagation();
-      cancelFriendRequestAction(o.to);
-    });
+    // 1. Traditional Card (Friends Tab)
+    if (el.outgoingRequestsList) {
+      const card = document.createElement('div');
+      card.className = 'outgoing-request-card';
+      card.innerHTML = `
+        <div class="avatar-circle" style="width:36px;height:36px;font-size:13px;background-color:${avatarBg}">
+          ${avatarImgHtml}
+        </div>
+        <div class="request-info">
+          <div class="request-name" style="font-size:13px;">${escapeHtml(o.toName || o.to)} <small style="color:var(--text-light)">@${escapeHtml(o.to)}</small></div>
+          <div style="font-size:11px;color:var(--text-muted)">Pending classmate approval</div>
+        </div>
+        <div class="request-actions">
+          <button class="btn-cancel-request" data-to="${o.to}">Cancel</button>
+        </div>
+      `;
 
-    el.outgoingRequestsList.appendChild(card);
+      card.querySelector('.btn-cancel-request').addEventListener('click', (e) => {
+        e.stopPropagation();
+        cancelFriendRequestAction(o.to);
+      });
+
+      el.outgoingRequestsList.appendChild(card);
+    }
+
+    // 2. Instagram Card (Dedicated Instagram Modal)
+    if (igOutList) {
+      const igItem = document.createElement('div');
+      igItem.className = 'ig-request-item';
+      igItem.id = `ig-out-${o.to}`;
+      igItem.innerHTML = `
+        <div class="ig-request-avatar" style="background-color:${avatarBg}">
+          ${avatarImgHtml}
+        </div>
+        <div class="ig-request-details">
+          <div class="ig-request-name">${escapeHtml(o.toName || o.to)}</div>
+          <div class="ig-request-handle">@${escapeHtml(o.to)}</div>
+          <div class="ig-request-major" style="color:var(--text-light);">Pending approval</div>
+        </div>
+        <div class="ig-request-buttons">
+          <button class="btn-ig-cancel" data-to="${o.to}">Cancel</button>
+        </div>
+      `;
+
+      igItem.querySelector('.btn-ig-cancel').addEventListener('click', async (e) => {
+        e.stopPropagation();
+        igItem.style.opacity = '0';
+        setTimeout(() => igItem.remove(), 250);
+        await cancelFriendRequestAction(o.to);
+      });
+
+      igOutList.appendChild(igItem);
+    }
   });
 }
 
@@ -3418,17 +3575,39 @@ if (el.friendsSubtabsNav) {
   });
 }
 
+// Instagram-Style Friend Requests Modal Wire-up
+const btnOpenFriendRequests = document.getElementById('btn-open-friend-requests');
+if (btnOpenFriendRequests) {
+  btnOpenFriendRequests.addEventListener('click', () => openFriendRequestsModal('received'));
+}
+
+const btnCloseIgRequests = document.getElementById('btn-close-ig-requests');
+const modalFriendRequests = document.getElementById('modal-friend-requests');
+if (btnCloseIgRequests && modalFriendRequests) {
+  btnCloseIgRequests.addEventListener('click', () => closeModal(modalFriendRequests));
+}
+
+if (modalFriendRequests) {
+  modalFriendRequests.addEventListener('click', (e) => {
+    if (e.target === modalFriendRequests) closeModal(modalFriendRequests);
+  });
+}
+
+const igTabRec = document.getElementById('ig-tab-received');
+if (igTabRec) {
+  igTabRec.addEventListener('click', () => switchIgRequestsTab('received'));
+}
+
+const igTabSent = document.getElementById('ig-tab-sent');
+if (igTabSent) {
+  igTabSent.addEventListener('click', () => switchIgRequestsTab('sent'));
+}
+
 // Quick Friends Requests Pill Handler (from Chats tab)
 const btnQuickRequests = document.getElementById('btn-quick-friend-requests');
 if (btnQuickRequests) {
   btnQuickRequests.addEventListener('click', () => {
-    // 1. Switch to Friends main tab
-    const friendsTabBtn = document.querySelector('.tab-btn[data-tab="friends"]');
-    if (friendsTabBtn) friendsTabBtn.click();
-
-    // 2. Switch to Requests subtab
-    const reqSubtabBtn = document.querySelector('.friends-subtab-btn[data-subtab="requests"]');
-    if (reqSubtabBtn) reqSubtabBtn.click();
+    openFriendRequestsModal('received');
   });
 }
 
