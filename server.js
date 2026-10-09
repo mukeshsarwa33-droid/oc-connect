@@ -785,7 +785,41 @@ const server = http.createServer(async (req, res) => {
         }));
       }
 
-      // 5. Campus Directory (High Performance - Supports 10,000+ Students)
+      // 5A. Classmate Search Endpoint (Debounced, Max 20 Results)
+      if (pathname === '/api/users/search' && req.method === 'GET') {
+        const query = (parsedUrl.searchParams.get('q') || parsedUrl.searchParams.get('query') || '').trim();
+        const limit = Math.min(parseInt(parsedUrl.searchParams.get('limit') || '20', 10), 50);
+        const currentUsername = (parsedUrl.searchParams.get('me') || '').trim().toLowerCase();
+        const resolvedMe = resolveUsername(currentUsername);
+
+        if (!query) {
+          return res.end(JSON.stringify({ students: [], total: 0 }));
+        }
+
+        const matches = DB.searchStudents(resolvedMe, query, limit);
+        const myFriends = resolvedMe ? DB.getFriends(resolvedMe) : [];
+        const myOutgoing = resolvedMe ? DB.getOutgoingRequests(resolvedMe).map(o => o.to) : [];
+
+        const studentList = matches.map(u => ({
+          username: u.username,
+          displayName: u.displayName,
+          major: u.major || 'Okanagan College',
+          avatarColor: u.avatarColor,
+          avatarImage: u.avatarImage,
+          online: u.online,
+          lastSeen: u.lastSeen,
+          isFriend: myFriends.includes(u.username),
+          isRequested: myOutgoing.includes(u.username),
+          isTrusted: resolvedMe ? DB.isTrusted(resolvedMe, u.username) : false
+        }));
+
+        return res.end(JSON.stringify({
+          students: studentList,
+          total: studentList.length
+        }));
+      }
+
+      // 5B. Campus Directory (High Performance - Supports 10,000+ Students)
       if (pathname === '/api/users/all' && req.method === 'GET') {
         const currentUsername = (parsedUrl.searchParams.get('me') || '').trim().toLowerCase();
         const resolvedMe = resolveUsername(currentUsername);

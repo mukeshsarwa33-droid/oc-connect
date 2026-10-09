@@ -3304,20 +3304,35 @@ function renderFriendsList(friends) {
   });
 }
 
-// Load Campus Directory (All 100+ Students)
-async function loadCampusDirectory() {
+// Load Campus Directory (Debounced Search, Max 20 Results, Empty Default State)
+async function loadCampusDirectory(forcedQuery) {
   if (!state.currentUser) return;
+  const query = (typeof forcedQuery === 'string' ? forcedQuery : (state.directorySearchQuery || '')).trim();
+
+  // Show empty initial state without querying or dumping all students on page open
+  if (!query) {
+    state.allStudents = [];
+    if (el.totalStudentsCount) el.totalStudentsCount.textContent = '0';
+    if (el.campusDirectoryList) {
+      el.campusDirectoryList.innerHTML = `<div class="empty-inline-hint" style="padding:32px 16px;text-align:center;color:var(--text-light);font-size:14px;">
+        <div style="font-size:28px;margin-bottom:8px;">🔍</div>
+        <strong>Find Classmates</strong><br/>
+        Type a name or major to search classmates
+      </div>`;
+    }
+    return;
+  }
+
   try {
-    const url = `/api/users/all?me=${encodeURIComponent(state.currentUser.username)}&query=${encodeURIComponent(state.directorySearchQuery)}&filter=${encodeURIComponent(state.selectedFilter)}`;
+    const url = `/api/users/search?q=${encodeURIComponent(query)}&limit=20&me=${encodeURIComponent(state.currentUser.username)}`;
     const res = await fetch(url);
     const data = await res.json();
-    if (data.students) {
-      state.allStudents = data.students;
-      el.totalStudentsCount.textContent = data.total || data.students.length;
-      renderCampusDirectory(data.students);
-    }
+    const students = data.students || [];
+    state.allStudents = students;
+    if (el.totalStudentsCount) el.totalStudentsCount.textContent = data.total || students.length;
+    renderCampusDirectory(students);
   } catch (err) {
-    console.error('Error loading campus directory:', err);
+    console.error('Error searching classmates:', err);
   }
 }
 
@@ -3429,7 +3444,7 @@ if (el.filterChipsBar) {
   });
 }
 
-// Friends Search Input
+// Friends Search Input (300ms Debounce)
 if (el.friendsFilterInput) {
   let searchDebounce;
   el.friendsFilterInput.addEventListener('input', () => {
@@ -3437,7 +3452,7 @@ if (el.friendsFilterInput) {
     searchDebounce = setTimeout(() => {
       state.directorySearchQuery = el.friendsFilterInput.value.trim().toLowerCase();
       loadCampusDirectory();
-    }, 250);
+    }, 300);
   });
 }
 
