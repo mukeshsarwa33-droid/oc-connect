@@ -254,10 +254,17 @@
             </svg>
             <span id="header-requests-badge" class="badge-count" style="position:absolute;top:-4px;right:-4px;font-size:10px;padding:1px 5px;display:none;background:#FF3B30;color:white;border-radius:10px;border:1.5px solid white;">0</span>
           </button>
-          <div class="user-chip" id="user-chip-btn" title="My Profile & Settings" style="cursor:pointer">
+          <div class="user-chip" id="user-chip-btn" role="button" tabindex="0" title="My Profile Settings & Change Username" style="cursor:pointer">
             <span id="current-user-avatar" class="avatar-sm">U</span>
             <span id="current-user-handle">@username</span>
+            <span style="font-size:11px;opacity:0.75;margin-left:2px;">✏️</span>
           </div>
+          <button id="btn-open-settings-gear" type="button" class="icon-btn" title="My Profile Settings & Change Username">
+            <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="#007AFF" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="pointer-events: none;">
+              <circle cx="12" cy="12" r="3"></circle>
+              <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
+            </svg>
+          </button>
           <button id="btn-logout" type="button" class="icon-btn btn-logout-btn" title="Log Out">
             <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="#8E8E93" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="pointer-events: none;">
               <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/>
@@ -322,6 +329,10 @@
             <span class="pill-icon">⭐</span>
             <span>Starred</span>
           </button>
+          <button id="btn-quick-settings-pill" class="btn-quick-starred-pill" type="button" title="My Profile Settings & Change Username">
+            <span class="pill-icon">👤</span>
+            <span>Profile</span>
+          </button>
         </div>
 
         <div id="chats-list" class="list-view">
@@ -337,6 +348,20 @@
 
       <!-- TAB 2: FRIENDS & CAMPUS DIRECTORY -->
       <section id="tab-friends" class="tab-content">
+        <!-- MY PROFILE BANNER (Instant Access to Profile & Change Username) -->
+        <div class="my-profile-banner-card" id="my-profile-banner-card" style="margin: 6px 16px 10px 16px; padding: 10px 14px; background: var(--bg-card, #FFFFFF); border-radius: 14px; border: 0.5px solid var(--ios-border, rgba(0,0,0,0.08)); display: flex; align-items: center; justify-content: space-between; cursor: pointer; box-shadow: 0 1px 3px rgba(0,0,0,0.03);">
+          <div style="display:flex;align-items:center;gap:10px;">
+            <span id="my-banner-avatar" class="avatar-sm" style="width:36px;height:36px;font-size:15px;background:var(--ios-blue-gradient);">U</span>
+            <div>
+              <div id="my-banner-name" style="font-size:13.5px;font-weight:600;color:var(--text-dark);">My Profile</div>
+              <div id="my-banner-handle" style="font-size:11.5px;color:var(--text-light);">@username • Tap to edit handle & profile</div>
+            </div>
+          </div>
+          <button type="button" class="btn-secondary" style="padding:6px 12px;font-size:12px;font-weight:600;border-radius:8px;border:none;background:rgba(0,122,255,0.1);color:#007AFF;cursor:pointer;pointer-events:none;">
+            ✏️ Edit Handle
+          </button>
+        </div>
+
         <!-- Friends Sub-Navigation Tabs -->
         <div class="friends-subtabs-nav" id="friends-subtabs-nav">
           <button class="friends-subtab-btn active" data-subtab="all">

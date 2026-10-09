@@ -7627,4 +7627,19 @@ button:active {
   color: #FFFFFF;
 }
 
+.my-profile-banner-card {
+  transition: transform 0.15s ease, background-color 0.15s ease;
+}
+
+.my-profile-banner-card:active {
+  transform: scale(0.985);
+  background: var(--bg-hover, rgba(0, 0, 0, 0.04));
+}
+
+[data-theme="dark"] .my-profile-banner-card {
+  background: #1C1C1E;
+  border-color: #2C2C2E;
+}
+
+
 

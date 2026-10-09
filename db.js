@@ -832,60 +832,41 @@ const DB = {
       const user = this.getUser(oldClean);
       if (!user) throw new Error(`User @${oldClean} not found`);
 
-      // 1. Temporarily change old user's oc_id to release unique constraint
-      const tempOcId = `${user.ocId}_renaming_${Date.now()}`;
-      db.prepare('UPDATE users SET oc_id = ? WHERE username = ?').run(tempOcId, oldClean);
-
-      // 2. Insert new user record preserving all student profile fields
+      // 1. Rename user in-place in users table (preserves oc_id, profile, and all student columns)
       db.prepare(`
-        INSERT INTO users (username, oc_id, display_name, major, avatar_color, avatar_image, email, phone, online, last_seen, created_at, is_demo, is_trusted, bio, campus, has_onboarded)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-      `).run(
-        newClean,
-        user.ocId,
-        newDisplayName || user.displayName,
-        user.major,
-        user.avatarColor,
-        user.avatarImage,
-        user.email || null,
-        user.phone || null,
-        1,
-        Date.now(),
-        user.createdAt,
-        user.isDemo ? 1 : 0,
-        user.isTrusted ? 1 : 0,
-        user.bio || '',
-        user.campus || 'Kelowna Campus (KLO)',
-        user.hasOnboarded ? 1 : 0
-      );
+        UPDATE users 
+        SET username = ?, 
+            display_name = COALESCE(?, display_name) 
+        WHERE username = ?
+      `).run(newClean, newDisplayName || null, oldClean);
 
-      // 3. Migrate friends
+      // 2. Migrate friends
       db.prepare('UPDATE friends SET user1 = ? WHERE user1 = ?').run(newClean, oldClean);
       db.prepare('UPDATE friends SET user2 = ? WHERE user2 = ?').run(newClean, oldClean);
 
-      // 4. Migrate friend requests
+      // 3. Migrate friend requests
       db.prepare('UPDATE friend_requests SET from_user = ? WHERE from_user = ?').run(newClean, oldClean);
       db.prepare('UPDATE friend_requests SET to_user = ? WHERE to_user = ?').run(newClean, oldClean);
       if (newDisplayName) {
         try { db.prepare('UPDATE friend_requests SET from_name = ? WHERE from_user = ?').run(newDisplayName, newClean); } catch(_) {}
       }
 
-      // 5. Migrate trust
+      // 4. Migrate trust
       db.prepare('UPDATE trusted_users SET truster = ? WHERE truster = ?').run(newClean, oldClean);
       db.prepare('UPDATE trusted_users SET trusted = ? WHERE trusted = ?').run(newClean, oldClean);
 
-      // 6. Migrate blocked users
+      // 5. Migrate blocked users
       db.prepare('UPDATE blocked_users SET blocker = ? WHERE blocker = ?').run(newClean, oldClean);
       db.prepare('UPDATE blocked_users SET blocked = ? WHERE blocked = ?').run(newClean, oldClean);
 
-      // 7. Migrate user sessions
+      // 6. Migrate user sessions
       db.prepare('UPDATE user_sessions SET username = ? WHERE username = ?').run(newClean, oldClean);
 
-      // 8. Migrate chat groups & members
+      // 7. Migrate chat groups & members
       db.prepare('UPDATE group_members SET username = ? WHERE username = ?').run(newClean, oldClean);
       db.prepare('UPDATE chat_groups SET created_by = ? WHERE created_by = ?').run(newClean, oldClean);
 
-      // 9. Migrate message sender & chatIds
+      // 8. Migrate message sender & chatIds
       db.prepare('UPDATE messages SET sender = ? WHERE sender = ?').run(newClean, oldClean);
       
       const chats = db.prepare("SELECT DISTINCT chat_id FROM messages WHERE chat_id LIKE ? OR chat_id LIKE ?").all(`%${oldClean}%`, `%${oldClean}%`);
@@ -900,15 +881,12 @@ const DB = {
         }
       }
 
-      // 10. Migrate pending notifications, pinned chats, starred messages, calls
+      // 9. Migrate pending notifications, pinned chats, starred messages, calls
       try { db.prepare('UPDATE pending_notifications SET username = ? WHERE username = ?').run(newClean, oldClean); } catch(_) {}
       try { db.prepare('UPDATE pinned_chats SET username = ? WHERE username = ?').run(newClean, oldClean); } catch(_) {}
       try { db.prepare('UPDATE starred_messages SET username = ? WHERE username = ?').run(newClean, oldClean); } catch(_) {}
       try { db.prepare('UPDATE calls SET caller = ? WHERE caller = ?').run(newClean, oldClean); } catch(_) {}
       try { db.prepare('UPDATE calls SET callee = ? WHERE callee = ?').run(newClean, oldClean); } catch(_) {}
-
-      // 11. Delete old user record
-      db.prepare('DELETE FROM users WHERE username = ?').run(oldClean);
 
       db.exec('COMMIT;');
       return this.getUser(newClean);

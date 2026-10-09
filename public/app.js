@@ -7974,7 +7974,7 @@ const elSettings = {
   toggleDarkMode: document.getElementById('toggle-dark-mode')
 };
 
-function openSettingsModal() {
+function openSettingsModal(focusField = null) {
   if (!state.currentUser) return;
   const u = state.currentUser;
 
@@ -8013,6 +8013,13 @@ function openSettingsModal() {
   }
 
   openModal(elSettings.modal);
+
+  if (focusField === 'username' && elSettings.usernameInput) {
+    setTimeout(() => {
+      elSettings.usernameInput.focus();
+      elSettings.usernameInput.select();
+    }, 280);
+  }
 }
 
 // Wire Sign Out inside Settings modal to main logout handler
@@ -8072,10 +8079,25 @@ if (el.btnGenerateAvatar) {
   });
 }
 
-// Open settings when user chip is clicked
+// Open settings when user chip or profile buttons are clicked
 const userChipBtn = document.getElementById('user-chip-btn');
 if (userChipBtn) {
-  userChipBtn.addEventListener('click', openSettingsModal);
+  userChipBtn.addEventListener('click', () => openSettingsModal('username'));
+}
+
+const btnOpenSettingsGear = document.getElementById('btn-open-settings-gear');
+if (btnOpenSettingsGear) {
+  btnOpenSettingsGear.addEventListener('click', () => openSettingsModal('username'));
+}
+
+const btnQuickSettingsPill = document.getElementById('btn-quick-settings-pill');
+if (btnQuickSettingsPill) {
+  btnQuickSettingsPill.addEventListener('click', () => openSettingsModal('username'));
+}
+
+const myProfileBanner = document.getElementById('my-profile-banner-card');
+if (myProfileBanner) {
+  myProfileBanner.addEventListener('click', () => openSettingsModal('username'));
 }
 
 // Close button (Done) — auto-saves any un-submitted edits in all input fields
@@ -8484,9 +8506,77 @@ if (elSettings.campusSelect) {
   elSettings.campusSelect.addEventListener('change', saveCampusAction);
 }
 
-// Helper to change username
+// Dedicated Helper to change username
 async function saveUsernameAction() {
-  await saveAllProfileSettingsAction();
+  if (!state.currentUser || !elSettings.usernameInput) return;
+  const newClean = (elSettings.usernameInput.value || '').trim().toLowerCase().replace(/^@/, '');
+  const current = state.currentUser.username;
+
+  if (!newClean) {
+    showToast('Username cannot be empty.', '⚠️');
+    return;
+  }
+
+  if (newClean === current) {
+    showToast(`Your username is already @${current}`, 'ℹ️');
+    return;
+  }
+
+  if (!/^[a-z0-9_]{3,20}$/.test(newClean)) {
+    showToast('Username must be 3–20 letters, numbers, or underscores.', '⚠️');
+    return;
+  }
+
+  const changeBtn = elSettings.btnSaveUsername;
+  if (changeBtn) {
+    changeBtn.disabled = true;
+    changeBtn.textContent = 'Saving... ⏳';
+  }
+
+  try {
+    const res = await fetch('/api/auth/change-username', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        currentUsername: current,
+        newUsername: newClean,
+        newDisplayName: (elSettings.displayNameInput && elSettings.displayNameInput.value.trim()) || state.currentUser.displayName
+      })
+    });
+
+    const data = await res.json();
+    if (!res.ok) {
+      showToast(data.error || 'Failed to change username.', '❌');
+      return;
+    }
+
+    if (data.user) {
+      state.currentUser = data.user;
+    } else {
+      state.currentUser.username = newClean;
+    }
+
+    localStorage.setItem('oc_connect_user', JSON.stringify(state.currentUser));
+
+    if (elSettings.cardHandle) elSettings.cardHandle.textContent = `@${state.currentUser.username}`;
+    if (el.currentUserHandle) el.currentUserHandle.textContent = `@${state.currentUser.username}`;
+    if (elSettings.usernameInput) elSettings.usernameInput.value = state.currentUser.username;
+    updateAllMyAvatarInstances();
+
+    connectEventSource();
+    loadFriendsList();
+    loadCampusDirectory();
+    loadRecentChats();
+
+    showToast(`Username changed to @${state.currentUser.username}! 🎉`, '✅');
+  } catch (err) {
+    showToast('Error changing username: ' + err.message, '❌');
+  } finally {
+    if (changeBtn) {
+      changeBtn.disabled = false;
+      changeBtn.textContent = 'Change';
+    }
+  }
 }
 
 // Save All Profile & Account Settings Button
@@ -8508,17 +8598,24 @@ if (elSettings.usernameInput) {
 }
 
 /**
- * Update all my avatar instances in the UI (header chip, chat headers, etc.)
+ * Update all my avatar instances in the UI (header chip, chat headers, friends banner)
  */
 function updateAllMyAvatarInstances() {
   if (!state.currentUser) return;
   const u = state.currentUser;
   const letter = (u.displayName || u.username || 'U').charAt(0).toUpperCase();
 
-  // App bar avatar
+  // App bar avatar & handle
   renderAvatar(el.currentUserAvatar, letter, u.avatarColor, u.avatarImage || null);
-  // Handle text
   if (el.currentUserHandle) el.currentUserHandle.textContent = `@${u.username}`;
+
+  // Friends tab My Profile Banner
+  const myBannerAvatar = document.getElementById('my-banner-avatar');
+  if (myBannerAvatar) renderAvatar(myBannerAvatar, letter, u.avatarColor, u.avatarImage || null);
+  const myBannerName = document.getElementById('my-banner-name');
+  if (myBannerName) myBannerName.textContent = u.displayName || u.username;
+  const myBannerHandle = document.getElementById('my-banner-handle');
+  if (myBannerHandle) myBannerHandle.textContent = `@${u.username} • Tap to edit handle & profile`;
 }
 
 // ===========================================================================

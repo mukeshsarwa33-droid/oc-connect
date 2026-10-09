@@ -3166,7 +3166,7 @@ const server = http.createServer(async (req, res) => {
       if (pathname === '/api/users/profile' && req.method === 'POST') {
         const body = await parseJsonBody(req);
         const auth = getSessionFromRequest(req, parsedUrl);
-        const resolved = (auth && auth.username) ? auth.username : resolveUsername(body.username);
+        const resolved = (auth && auth.user && auth.user.username) ? auth.user.username : resolveUsername(body.username);
 
         if (!resolved) {
           res.writeHead(404, { 'Content-Type': 'application/json' });
