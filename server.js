@@ -2197,25 +2197,29 @@ const server = http.createServer(async (req, res) => {
               currentCall.connectedAt = Date.now();
               DB.updateCall(callId, 'connected', currentCall.connectedAt);
 
-              broadcastToUser(resolvedCaller, 'call_accepted', {
+              const acceptPayload = {
                 callId,
                 recipient: resolvedRecipient,
-                demoVoicePrompt: `Hi there! I am ${recipientUser.displayName}. Great connecting with you at Okanagan College!`
-              });
-              broadcastToUser(resolvedCaller, 'voice_call_accepted', {
-                callId,
-                recipient: resolvedRecipient,
-                demoVoicePrompt: `Hi there! I am ${recipientUser.displayName}. Great connecting with you at Okanagan College!`
-              });
+                call: currentCall,
+                demoVoicePrompt: `Hi there! I am ${recipientUser.displayName} from Okanagan College. Great connecting with you on OC Connect!`
+              };
+
+              broadcastToUser(resolvedCaller, 'call_accepted', acceptPayload);
+              broadcastToUser(resolvedCaller, 'voice_call_accepted', acceptPayload);
             }
-          }, 3000);
+          }, 1800);
         }
 
-        return res.end(JSON.stringify({ success: true, callId, status: 'ringing' }));
+        return res.end(JSON.stringify({
+          success: true,
+          callId,
+          call: callSession,
+          status: 'ringing'
+        }));
       }
 
       if (pathname === '/api/calls/respond' && req.method === 'POST') {
-        const { callId, action, recipient } = await parseJsonBody(req);
+        const { callId, action, responder, recipient } = await parseJsonBody(req);
         const call = activeCalls.get(callId);
 
         if (!call) {
@@ -2231,17 +2235,20 @@ const server = http.createServer(async (req, res) => {
           broadcastToUser(call.caller, 'call_accepted', {
             callId,
             recipient: call.recipient,
-            offer: call.offer
+            offer: call.offer,
+            call
           });
           broadcastToUser(call.caller, 'voice_call_accepted', {
             callId,
             recipient: call.recipient,
-            offer: call.offer
+            offer: call.offer,
+            call
           });
 
           return res.end(JSON.stringify({
             success: true,
             status: 'connected',
+            call,
             offer: call.offer,
             candidates: call.candidates
           }));
@@ -2257,11 +2264,12 @@ const server = http.createServer(async (req, res) => {
       }
 
       if (pathname === '/api/calls/end' && req.method === 'POST') {
-        const { callId, sender, duration } = await parseJsonBody(req);
+        const { callId, sender, by, duration } = await parseJsonBody(req);
+        const effectiveSender = (sender || by || '').trim().toLowerCase();
         const call = activeCalls.get(callId);
 
         if (call) {
-          const other = call.caller === sender ? call.recipient : call.caller;
+          const other = call.caller === effectiveSender ? call.recipient : call.caller;
           broadcastToUser(other, 'call_ended', { callId, duration: duration || 0 });
           broadcastToUser(other, 'voice_call_ended', { callId, duration: duration || 0 });
 

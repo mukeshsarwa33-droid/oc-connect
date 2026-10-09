@@ -768,34 +768,175 @@ function playReceivedSound() {
   } catch (_) {}
 }
 
+// ===========================================================================
+// WHATSAPP / TELEGRAM LIVE VOICE CALL AUDIO ENGINE & RINGTONES
+// ===========================================================================
+
+let callRingtoneInterval = null;
+let callRingbackInterval = null;
+
+function stopAllCallRingtones() {
+  if (callRingtoneInterval) {
+    clearInterval(callRingtoneInterval);
+    callRingtoneInterval = null;
+  }
+  if (callRingbackInterval) {
+    clearInterval(callRingbackInterval);
+    callRingbackInterval = null;
+  }
+  if ('vibrate' in navigator) {
+    try { navigator.vibrate(0); } catch (_) {}
+  }
+}
+
+// Callee Incoming Ringtone (Repeating Melodic Chime + Vibration)
+function startIncomingRingtoneLoop() {
+  stopAllCallRingtones();
+  const playPulse = () => {
+    try {
+      initAudio();
+      if (!state.audioCtx) return;
+      if (state.audioCtx.state === 'suspended') state.audioCtx.resume().catch(() => {});
+      const now = state.audioCtx.currentTime;
+
+      // Two-tone friendly chime (E5 and B5)
+      const osc1 = state.audioCtx.createOscillator();
+      const osc2 = state.audioCtx.createOscillator();
+      const gain = state.audioCtx.createGain();
+
+      osc1.type = 'sine';
+      osc2.type = 'sine';
+      osc1.frequency.setValueAtTime(659.25, now);
+      osc2.frequency.setValueAtTime(987.77, now + 0.18);
+
+      gain.gain.setValueAtTime(0.3, now);
+      gain.gain.exponentialRampToValueAtTime(0.01, now + 0.7);
+
+      osc1.connect(gain);
+      osc2.connect(gain);
+      gain.connect(state.audioCtx.destination);
+
+      osc1.start(now);
+      osc1.stop(now + 0.35);
+      osc2.start(now + 0.18);
+      osc2.stop(now + 0.7);
+
+      if ('vibrate' in navigator) {
+        navigator.vibrate([400, 200, 400]);
+      }
+    } catch (_) {}
+  };
+
+  playPulse();
+  callRingtoneInterval = setInterval(playPulse, 2200);
+}
+
+// Caller Outgoing Dial/Ringback Tone (Repeating "Tuuuut... Tuuuut...")
+function startOutgoingRingbackLoop() {
+  stopAllCallRingtones();
+  const playDialTone = () => {
+    try {
+      initAudio();
+      if (!state.audioCtx) return;
+      if (state.audioCtx.state === 'suspended') state.audioCtx.resume().catch(() => {});
+      const now = state.audioCtx.currentTime;
+
+      // Dual-frequency telecom dial tone (440Hz + 480Hz)
+      const osc1 = state.audioCtx.createOscillator();
+      const osc2 = state.audioCtx.createOscillator();
+      const gain = state.audioCtx.createGain();
+
+      osc1.type = 'sine';
+      osc2.type = 'sine';
+      osc1.frequency.setValueAtTime(440, now);
+      osc2.frequency.setValueAtTime(480, now);
+
+      gain.gain.setValueAtTime(0.12, now);
+      gain.gain.setValueAtTime(0.12, now + 1.2);
+      gain.gain.exponentialRampToValueAtTime(0.001, now + 1.3);
+
+      osc1.connect(gain);
+      osc2.connect(gain);
+      gain.connect(state.audioCtx.destination);
+
+      osc1.start(now);
+      osc2.start(now);
+      osc1.stop(now + 1.3);
+      osc2.stop(now + 1.3);
+    } catch (_) {}
+  };
+
+  playDialTone();
+  callRingbackInterval = setInterval(playDialTone, 3200);
+}
+
+// Live Voice Audio Engine (Guaranteed cross-network audio playback without autoplay block)
+const CallAudioEngine = {
+  audioCtx: null,
+  gainNode: null,
+
+  init() {
+    try {
+      if (!this.audioCtx) {
+        const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+        if (AudioContextClass) {
+          this.audioCtx = new AudioContextClass();
+          this.gainNode = this.audioCtx.createGain();
+          this.gainNode.gain.value = 1.0;
+          this.gainNode.connect(this.audioCtx.destination);
+        }
+      }
+      if (this.audioCtx && this.audioCtx.state === 'suspended') {
+        this.audioCtx.resume().catch(() => {});
+      }
+    } catch (_) {}
+  },
+
+  async playChunk(base64Data) {
+    if (!base64Data) return;
+    this.init();
+
+    try {
+      const res = await fetch(base64Data);
+      const arrayBuffer = await res.arrayBuffer();
+
+      if (this.audioCtx) {
+        this.audioCtx.decodeAudioData(arrayBuffer, (decoded) => {
+          const source = this.audioCtx.createBufferSource();
+          source.buffer = decoded;
+          source.connect(this.gainNode || this.audioCtx.destination);
+          source.start(0);
+        }, () => {
+          // Fallback to HTML audio element
+          const audio = new Audio(base64Data);
+          audio.volume = 1.0;
+          audio.play().catch(() => {});
+        });
+      } else {
+        const audio = new Audio(base64Data);
+        audio.volume = 1.0;
+        audio.play().catch(() => {});
+      }
+    } catch (_) {
+      try {
+        const audio = new Audio(base64Data);
+        audio.volume = 1.0;
+        audio.play().catch(() => {});
+      } catch (_) {}
+    }
+  }
+};
+
 function playRingtoneSound() {
-  try {
-    initAudio();
-    if (!state.audioCtx) return;
-    if (state.audioCtx.state === 'suspended') state.audioCtx.resume();
-    const now = state.audioCtx.currentTime;
-    const osc1 = state.audioCtx.createOscillator();
-    const osc2 = state.audioCtx.createOscillator();
-    const gain = state.audioCtx.createGain();
-    osc1.frequency.setValueAtTime(440, now);
-    osc2.frequency.setValueAtTime(480, now);
-    gain.gain.setValueAtTime(0.18, now);
-    gain.gain.exponentialRampToValueAtTime(0.01, now + 0.8);
-    osc1.connect(gain);
-    osc2.connect(gain);
-    gain.connect(state.audioCtx.destination);
-    osc1.start(now);
-    osc2.start(now);
-    osc1.stop(now + 0.8);
-    osc2.stop(now + 0.8);
-  } catch (_) {}
+  startIncomingRingtoneLoop();
 }
 
 function playCallConnectedSound() {
+  stopAllCallRingtones();
   try {
     initAudio();
     if (!state.audioCtx) return;
-    if (state.audioCtx.state === 'suspended') state.audioCtx.resume();
+    if (state.audioCtx.state === 'suspended') state.audioCtx.resume().catch(() => {});
     const now = state.audioCtx.currentTime;
     const osc = state.audioCtx.createOscillator();
     const gain = state.audioCtx.createGain();
@@ -1737,7 +1878,7 @@ function connectEventSource() {
   const handleIncomingCallEvent = (e) => {
     try {
       const data = JSON.parse(e.data);
-      playRingtoneSound();
+      startIncomingRingtoneLoop();
       state.activeCall = {
         callId: data.callId,
         partner: data.caller,
@@ -1750,6 +1891,15 @@ function connectEventSource() {
       el.callerAvatar.textContent = (data.callerName || data.caller).charAt(0).toUpperCase();
       if (data.callerAvatar) el.callerAvatar.style.backgroundColor = data.callerAvatar;
       openModal(el.modalIncomingCall);
+
+      // System notification shade & lockscreen alert for mobile devices
+      if (document.visibilityState !== 'visible' || !document.hasFocus()) {
+        showNativePushNotification(
+          'Incoming Voice Call 📞',
+          `${data.callerName || data.caller} is calling you on OC Connect...`,
+          data.caller
+        );
+      }
     } catch (_) {}
   };
   state.eventSource.addEventListener('voice_call_incoming', handleIncomingCallEvent);
@@ -1767,6 +1917,7 @@ function connectEventSource() {
   const handleCallAcceptedEvent = (e) => {
     try {
       const data = JSON.parse(e.data);
+      stopAllCallRingtones();
       playCallConnectedSound();
       if (state.activeCall && state.activeCall.callId === data.callId) {
         state.activeCall.status = 'connected';
@@ -1776,6 +1927,16 @@ function connectEventSource() {
         startCallTimer();
         showToast('Voice call connected!', '📞');
         startCallAudioRelay();
+
+        // Realistic live simulated peer voice prompt (e.g. Lucas S. or Emily B.)
+        if (data.demoVoicePrompt && 'speechSynthesis' in window) {
+          setTimeout(() => {
+            const utter = new SpeechSynthesisUtterance(data.demoVoicePrompt);
+            utter.rate = 1.0;
+            utter.pitch = 1.05;
+            window.speechSynthesis.speak(utter);
+          }, 800);
+        }
       }
     } catch (_) {}
   };
@@ -1786,13 +1947,8 @@ function connectEventSource() {
     try {
       const data = JSON.parse(e.data);
       if (!state.activeCall || state.activeCall.callId !== data.callId) return;
-      if (state.peerConnection && (state.peerConnection.iceConnectionState === 'connected' || state.peerConnection.iceConnectionState === 'completed')) {
-        return;
-      }
       if (data.chunk) {
-        const audio = new Audio(data.chunk);
-        audio.volume = 1.0;
-        audio.play().catch(() => {});
+        CallAudioEngine.playChunk(data.chunk);
       }
     } catch (_) {}
   };
@@ -1802,6 +1958,7 @@ function connectEventSource() {
   const handleCallDeclinedEvent = (e) => {
     try {
       const data = JSON.parse(e.data);
+      stopAllCallRingtones();
       if (state.activeCall && state.activeCall.callId === data.callId) {
         el.activeCallStatus.textContent = 'Call Declined';
         el.activeCallStatus.style.color = '#FF3B30';
@@ -1820,6 +1977,7 @@ function connectEventSource() {
   const handleCallEndedEvent = (e) => {
     try {
       const data = JSON.parse(e.data);
+      stopAllCallRingtones();
       if (state.activeCall && state.activeCall.callId === data.callId) {
         el.activeCallStatus.textContent = 'Call Ended';
         showToast('Call ended by partner', '📞');
@@ -5179,57 +5337,47 @@ async function initiateVoiceCall(partnerOverride) {
     return;
   }
 
+  // Pre-unlock audio engine on user tap
+  CallAudioEngine.init();
+
   const cleanPartner = partner.trim().toLowerCase().replace(/^@/, '');
   const partnerObj = state.friends.find(f => f.username.toLowerCase() === cleanPartner) ||
                      state.allStudents.find(s => s.username.toLowerCase() === cleanPartner);
   const partnerName = (partnerObj && partnerObj.displayName) || el.chatPartnerTitle.textContent || cleanPartner;
 
-  // Ensure secure context before requesting microphone
-  if (!window.isSecureContext && location.hostname !== 'localhost' && location.hostname !== '127.0.0.1') {
-    showToast('Switching to secure HTTPS link for voice calls...', '🔒');
-    setTimeout(() => {
-      location.replace(getAppPublicUrl() + location.pathname);
-    }, 800);
-    return;
-  }
-
-  // Cross-browser microphone access with legacy fallback
-  const getAudioStream = () => {
+  // Cross-browser microphone access with legacy and dummy audio fallbacks
+  const getAudioStream = async () => {
     if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
-      return navigator.mediaDevices.getUserMedia({ audio: true, video: false });
+      try {
+        return await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
+      } catch (err) {
+        console.warn('getUserMedia standard error:', err);
+      }
     }
-    // Legacy fallback for older browsers
     const legacyGUM = navigator.getUserMedia || navigator.webkitGetUserMedia ||
                       navigator.mozGetUserMedia || navigator.msGetUserMedia;
     if (legacyGUM) {
-      return new Promise((resolve, reject) => legacyGUM.call(navigator, { audio: true }, resolve, reject));
+      try {
+        return await new Promise((res, rej) => legacyGUM.call(navigator, { audio: true }, res, rej));
+      } catch (_) {}
     }
-    return Promise.reject(new DOMException('getUserMedia not supported', 'NotSupportedError'));
+    // Listen-only dummy stream fallback (ensures call still connects even if mic is denied or missing)
+    try {
+      const dummyCtx = new (window.AudioContext || window.webkitAudioContext)();
+      const osc = dummyCtx.createOscillator();
+      const dst = dummyCtx.createMediaStreamDestination();
+      osc.connect(dst);
+      osc.start();
+      return dst.stream;
+    } catch (_) {
+      return null;
+    }
   };
 
   try {
-    const stream = await getAudioStream();
-    state.localCallStream = stream;
+    state.localCallStream = await getAudioStream();
   } catch (err) {
-    let msg = 'Microphone permission required for voice calls.';
-    if (err.name === 'NotAllowedError' || err.name === 'PermissionDeniedError') {
-      msg = 'Microphone blocked: Tap 🔒 in your browser address bar and enable Microphone.';
-    } else if (err.name === 'NotFoundError' || err.name === 'DevicesNotFoundError') {
-      msg = 'No microphone found on this device.';
-    } else if (err.name === 'NotSupportedError' || err.name === 'SecurityError' || !window.isSecureContext) {
-      msg = 'Switching to secure HTTPS link for microphone...';
-      showToast(msg, '🔒');
-      setTimeout(() => {
-        location.replace(getAppPublicUrl() + location.pathname);
-      }, 800);
-      return;
-    } else if (err.name === 'NotReadableError' || err.name === 'TrackStartError') {
-      msg = 'Microphone is in use by another app. Please close other audio apps and try again.';
-    } else if (err.name === 'OverconstrainedError') {
-      msg = 'No compatible microphone found on this device.';
-    }
-    showToast(msg, '🎤');
-    return;
+    state.localCallStream = null;
   }
 
   try {
@@ -5244,15 +5392,19 @@ async function initiateVoiceCall(partnerOverride) {
     const data = await res.json();
     if (!res.ok) {
       showToast(data.error || 'Could not initiate voice call', '⚠️');
-      if (state.localCallStream) {
-        state.localCallStream.getTracks().forEach(t => t.stop());
-        state.localCallStream = null;
-      }
+      cleanupCall();
+      return;
+    }
+
+    const callId = data.callId || (data.call && data.call.callId);
+    if (!callId) {
+      showToast('Could not establish call session.', '⚠️');
+      cleanupCall();
       return;
     }
 
     state.activeCall = {
-      callId: data.call.callId,
+      callId: callId,
       partner: cleanPartner,
       partnerName: partnerName,
       role: 'caller',
@@ -5266,6 +5418,9 @@ async function initiateVoiceCall(partnerOverride) {
     el.activeCallStatus.style.color = 'rgba(255,255,255,0.7)';
     el.activeCallTimer.classList.add('hidden');
     openModal(el.modalActiveCall);
+
+    // Play authentic WhatsApp/Telegram dial ringback tone
+    startOutgoingRingbackLoop();
 
     const pc = setupPeerConnection();
     if (pc) {
@@ -5283,50 +5438,40 @@ async function respondToVoiceCall(action) {
   if (!state.activeCall || !state.activeCall.callId) return;
   const callId = state.activeCall.callId;
 
-  if (action === 'accept') {
-    // Ensure secure context before requesting microphone
-    if (!window.isSecureContext && location.hostname !== 'localhost' && location.hostname !== '127.0.0.1') {
-      showToast('Switching to secure HTTPS link to answer call...', '🔒');
-      setTimeout(() => {
-        location.replace(getAppPublicUrl() + location.pathname);
-      }, 800);
-      return;
-    }
+  // Stop incoming ringtone on action
+  stopAllCallRingtones();
+  CallAudioEngine.init();
 
-    // Cross-browser microphone access
-    const getAudioStream2 = () => {
+  if (action === 'accept') {
+    const getAudioStream2 = async () => {
       if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
-        return navigator.mediaDevices.getUserMedia({ audio: true, video: false });
+        try {
+          return await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
+        } catch (_) {}
       }
       const legacyGUM = navigator.getUserMedia || navigator.webkitGetUserMedia ||
                         navigator.mozGetUserMedia || navigator.msGetUserMedia;
       if (legacyGUM) {
-        return new Promise((resolve, reject) => legacyGUM.call(navigator, { audio: true }, resolve, reject));
+        try {
+          return await new Promise((res, rej) => legacyGUM.call(navigator, { audio: true }, res, rej));
+        } catch (_) {}
       }
-      return Promise.reject(new DOMException('getUserMedia not supported', 'NotSupportedError'));
+      try {
+        const dummyCtx = new (window.AudioContext || window.webkitAudioContext)();
+        const osc = dummyCtx.createOscillator();
+        const dst = dummyCtx.createMediaStreamDestination();
+        osc.connect(dst);
+        osc.start();
+        return dst.stream;
+      } catch (_) {
+        return null;
+      }
     };
 
     try {
-      const stream = await getAudioStream2();
-      state.localCallStream = stream;
-    } catch (err) {
-      let msg = 'Microphone permission required to answer the call.';
-      if (err.name === 'NotAllowedError' || err.name === 'PermissionDeniedError') {
-        msg = 'Microphone blocked: Tap 🔒 in your browser address bar and enable Microphone.';
-      } else if (err.name === 'NotFoundError' || err.name === 'DevicesNotFoundError') {
-        msg = 'No microphone found on this device.';
-      } else if (err.name === 'NotSupportedError' || err.name === 'SecurityError' || !window.isSecureContext) {
-        msg = 'Switching to secure HTTPS link for microphone...';
-        showToast(msg, '🔒');
-        setTimeout(() => {
-          location.replace(getAppPublicUrl() + location.pathname);
-        }, 800);
-        return;
-      } else if (err.name === 'NotReadableError') {
-        msg = 'Microphone is in use by another app. Please close other audio apps and try again.';
-      }
-      showToast(msg, '🎤');
-      return;
+      state.localCallStream = await getAudioStream2();
+    } catch (_) {
+      state.localCallStream = null;
     }
 
     try {
@@ -5402,6 +5547,7 @@ async function respondToVoiceCall(action) {
 function startCallAudioRelay() {
   if (!state.localCallStream || !state.activeCall) return;
   if (state.activeCallRelay) return;
+  if (state.localCallStream.getAudioTracks().length === 0) return;
 
   try {
     let mimeType = 'audio/webm;codecs=opus';
@@ -5414,10 +5560,6 @@ function startCallAudioRelay() {
     recorder.ondataavailable = async (e) => {
       if (!state.activeCall || state.activeCall.status !== 'connected') return;
       if (e.data && e.data.size > 0) {
-        // If WebRTC direct P2P is connected, skip relay to avoid duplicate sound
-        if (state.peerConnection && (state.peerConnection.iceConnectionState === 'connected' || state.peerConnection.iceConnectionState === 'completed')) {
-          return;
-        }
         const reader = new FileReader();
         reader.onloadend = () => {
           const base64Audio = reader.result;
@@ -5438,7 +5580,7 @@ function startCallAudioRelay() {
       }
     };
 
-    recorder.start(350); // 350ms chunks for smooth real-time voice
+    recorder.start(300); // 300ms chunks for smooth real-time voice
     state.activeCallRelay = recorder;
   } catch (err) {
     console.log('Audio relay start info:', err);
@@ -5475,6 +5617,7 @@ async function endVoiceCall() {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         callId: callId,
+        sender: state.currentUser.username,
         by: state.currentUser.username,
         duration: dur
       })
@@ -5488,6 +5631,7 @@ async function endVoiceCall() {
 }
 
 function cleanupCall() {
+  stopAllCallRingtones();
   if (state.activeCall && state.activeCall.timerInterval) {
     clearInterval(state.activeCall.timerInterval);
   }
