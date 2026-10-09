@@ -22,8 +22,11 @@ const state = {
   chats: {},               // target -> array of messages
   eventSource: null,       // SSE connection
   reconnectTimer: null,
-  chatSyncInterval: null,  // Active real-time loop when chat is open (700ms)
-  homeSyncInterval: null,  // Background sync for home screen (3500ms)
+  chatSyncInterval: null,
+  homeSyncInterval: null,
+  earliestMessageTimestamp: null, // Cursor pagination: lowest timestamp currently in DOM
+  isLoadingOlderMessages: false,  // Prevents duplicate pagination requests
+  hasMoreOlderMessages: true,     // False when top of conversation is reached
   renderedMsgIds: new Set(), // Deduplication set for zero-flicker instant appends
   trustedUsersSet: new Set(), // Set of verified trusted usernames
   typingTimeout: null,
@@ -3743,6 +3746,9 @@ async function openChat(target, title, isChannel = false, isOnline = false) {
   state.currentGroupId = null;
   if (el.messagesContainer) el.messagesContainer.innerHTML = '';
   state.renderedMsgIds.clear();
+  state.earliestMessageTimestamp = null;
+  state.isLoadingOlderMessages = false;
+  state.hasMoreOlderMessages = true;
 
   // Smooth Native iOS Navigation Slide-In
   el.mainScreen.classList.add('chat-open');
@@ -3818,6 +3824,9 @@ async function openGroupChat(groupId, groupName, avatarColor, avatarImage) {
   state.currentGroupId = groupId;
   if (el.messagesContainer) el.messagesContainer.innerHTML = '';
   state.renderedMsgIds.clear();
+  state.earliestMessageTimestamp = null;
+  state.isLoadingOlderMessages = false;
+  state.hasMoreOlderMessages = true;
 
   el.mainScreen.classList.add('chat-open');
   el.chatScreen.classList.remove('hidden');
@@ -3909,11 +3918,11 @@ async function fetchAndRenderChatMessages(isInitial = false) {
   try {
     let url;
     if (state.isGroup) {
-      url = `/api/messages/history?target=${encodeURIComponent(state.currentGroupId)}&isGroup=true`;
+      url = `/api/messages/history?target=${encodeURIComponent(state.currentGroupId)}&isGroup=true&limit=50`;
     } else if (state.isChannel) {
-      url = `/api/messages/history?target=${encodeURIComponent(state.currentChatTarget)}&channel=true`;
+      url = `/api/messages/history?target=${encodeURIComponent(state.currentChatTarget)}&channel=true&limit=50`;
     } else {
-      url = `/api/messages/history?me=${encodeURIComponent(state.currentUser.username)}&target=${encodeURIComponent(state.currentChatTarget)}`;
+      url = `/api/messages/history?me=${encodeURIComponent(state.currentUser.username)}&target=${encodeURIComponent(state.currentChatTarget)}&limit=50`;
     }
 
     const res = await fetch(url);
@@ -3926,6 +3935,13 @@ async function fetchAndRenderChatMessages(isInitial = false) {
     const data = await res.json();
     const messages = data.messages || [];
     state.chats[state.currentChatTarget] = messages;
+
+    if (messages.length > 0) {
+      state.earliestMessageTimestamp = Math.min(...messages.map(m => m.timestamp));
+      state.hasMoreOlderMessages = (messages.length >= 50);
+    } else {
+      state.hasMoreOlderMessages = false;
+    }
 
     // Persist all conversation messages into local device IndexedDB storage
     LocalDeviceStore.saveMessages(targetKey, messages);
@@ -4055,15 +4071,16 @@ function renderStatusTick(status) {
   return `<span class="msg-tick sent" title="Sent">✓</span>`;
 }
 
-// Append Message to UI (WhatsApp & iMessage Hybrid Style)
-function appendMessageToChat(msg, isSent) {
+// Append Message to UI (WhatsApp & iMessage Hybrid Style, supports prepend)
+function appendMessageToChat(msg, isSent, prepend = false) {
   // WhatsApp-style Centered System Message Pill (e.g. "Alex created group 'COSC 111'")
   if (msg.sender === 'System' || msg.sender === 'OC System') {
     const sysDiv = document.createElement('div');
     sysDiv.className = 'chat-system-message';
     sysDiv.dataset.msgId = msg.id;
     sysDiv.innerHTML = `<span class="chat-system-pill">${escapeHtml(msg.text)}</span>`;
-    el.messagesContainer.appendChild(sysDiv);
+    if (prepend) el.messagesContainer.prepend(sysDiv);
+    else el.messagesContainer.appendChild(sysDiv);
     return;
   }
 
@@ -4525,7 +4542,78 @@ function appendMessageToChat(msg, isSent) {
   // Attach Native Touch & Drag Swipe-to-Reply
   attachSwipeToReply(wrapper, bubble, msg);
 
-  el.messagesContainer.appendChild(wrapper);
+  if (prepend) {
+    el.messagesContainer.prepend(wrapper);
+  } else {
+    el.messagesContainer.appendChild(wrapper);
+  }
+}
+
+// ===========================================================================
+// CURSOR-BASED CHAT PAGINATION (Telegram & Mesibo Messenger Architecture)
+// ===========================================================================
+async function loadOlderMessages() {
+  if (state.isLoadingOlderMessages || !state.hasMoreOlderMessages || !state.earliestMessageTimestamp) return;
+  state.isLoadingOlderMessages = true;
+
+  const container = el.messagesContainer;
+  const prevScrollHeight = container.scrollHeight;
+  const prevScrollTop = container.scrollTop;
+
+  try {
+    let url;
+    const beforeTs = state.earliestMessageTimestamp;
+    if (state.isGroup) {
+      url = `/api/messages/history?target=${encodeURIComponent(state.currentGroupId)}&isGroup=true&before=${beforeTs}&limit=50`;
+    } else if (state.isChannel) {
+      url = `/api/messages/history?target=${encodeURIComponent(state.currentChatTarget)}&channel=true&before=${beforeTs}&limit=50`;
+    } else {
+      url = `/api/messages/history?me=${encodeURIComponent(state.currentUser.username)}&target=${encodeURIComponent(state.currentChatTarget)}&before=${beforeTs}&limit=50`;
+    }
+
+    const res = await fetch(url);
+    if (!res.ok) return;
+    const data = await res.json();
+    const olderMessages = data.messages || [];
+
+    if (olderMessages.length < 50) {
+      state.hasMoreOlderMessages = false;
+    }
+
+    if (olderMessages.length > 0) {
+      // Sort descending (newest of older batch to oldest) so prepending stacks them chronologically
+      const sorted = [...olderMessages].sort((a, b) => b.timestamp - a.timestamp);
+      sorted.forEach(m => {
+        if (!state.renderedMsgIds.has(m.id)) {
+          state.renderedMsgIds.add(m.id);
+          const mSender = (m.sender || '').trim().toLowerCase().replace(/^@/, '');
+          const isSent = (mSender === state.currentUser.username.toLowerCase());
+          appendMessageToChat(m, isSent, true);
+        }
+      });
+
+      state.earliestMessageTimestamp = Math.min(...olderMessages.map(m => m.timestamp));
+
+      // Mesibo & Telegram Anchor Preservation: maintain exact viewport scroll offset
+      requestAnimationFrame(() => {
+        const newScrollHeight = container.scrollHeight;
+        container.scrollTop = (newScrollHeight - prevScrollHeight) + prevScrollTop;
+      });
+    }
+  } catch (err) {
+    console.error('Failed to load older messages:', err);
+  } finally {
+    state.isLoadingOlderMessages = false;
+  }
+}
+
+// Scroll-up listener for chat message pagination
+if (el.messagesContainer) {
+  el.messagesContainer.addEventListener('scroll', () => {
+    if (el.messagesContainer.scrollTop <= 80 && state.hasMoreOlderMessages && !state.isLoadingOlderMessages) {
+      loadOlderMessages();
+    }
+  }, { passive: true });
 }
 
 // ===========================================================================

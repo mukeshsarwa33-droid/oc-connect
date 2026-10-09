@@ -326,10 +326,24 @@ const stmts = {
     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `),
   getChatHistory: db.prepare(`
-    SELECT * FROM messages WHERE chat_id = ? ORDER BY timestamp ASC LIMIT ?
+    SELECT * FROM (
+      SELECT * FROM messages WHERE chat_id = ? ORDER BY timestamp DESC LIMIT ?
+    ) ORDER BY timestamp ASC
+  `),
+  getChatHistoryBefore: db.prepare(`
+    SELECT * FROM (
+      SELECT * FROM messages WHERE chat_id = ? AND timestamp < ? ORDER BY timestamp DESC LIMIT ?
+    ) ORDER BY timestamp ASC
   `),
   getChannelHistory: db.prepare(`
-    SELECT * FROM messages WHERE channel = ? ORDER BY timestamp ASC LIMIT ?
+    SELECT * FROM (
+      SELECT * FROM messages WHERE channel = ? ORDER BY timestamp DESC LIMIT ?
+    ) ORDER BY timestamp ASC
+  `),
+  getChannelHistoryBefore: db.prepare(`
+    SELECT * FROM (
+      SELECT * FROM messages WHERE channel = ? AND timestamp < ? ORDER BY timestamp DESC LIMIT ?
+    ) ORDER BY timestamp ASC
   `),
   markMessagesRead: db.prepare(`
     UPDATE messages SET status = 'read' WHERE chat_id = ? AND sender = ? AND status != 'read'
@@ -1082,13 +1096,23 @@ const DB = {
     return this.getMessageReactions(messageId);
   },
 
-  getChatHistory(chatId, limit = 300) {
+  getChatHistory(chatId, limit = 50) {
     const rows = stmts.getChatHistory.all(chatId, limit);
     return rows.map(r => formatMessageRecord(r));
   },
 
-  getChannelHistory(channel, limit = 200) {
+  getChatHistoryBefore(chatId, beforeTimestamp, limit = 50) {
+    const rows = stmts.getChatHistoryBefore.all(chatId, beforeTimestamp, limit);
+    return rows.map(r => formatMessageRecord(r));
+  },
+
+  getChannelHistory(channel, limit = 50) {
     const rows = stmts.getChannelHistory.all(channel.toLowerCase(), limit);
+    return rows.map(r => formatMessageRecord(r));
+  },
+
+  getChannelHistoryBefore(channel, beforeTimestamp, limit = 50) {
+    const rows = stmts.getChannelHistoryBefore.all(channel.toLowerCase(), beforeTimestamp, limit);
     return rows.map(r => formatMessageRecord(r));
   },
 

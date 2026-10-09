@@ -1180,21 +1180,27 @@ const server = http.createServer(async (req, res) => {
         return res.end(JSON.stringify({ success: true, blocked: blockedList }));
       }
 
-      // 10. Messages: Get History
+      // 10. Messages: Get History (With Telegram / Mesibo Cursor Pagination)
       if (pathname === '/api/messages/history' && req.method === 'GET') {
         const me = (parsedUrl.searchParams.get('me') || '').trim().toLowerCase();
         const target = (parsedUrl.searchParams.get('target') || '').trim().toLowerCase();
         const isChannel = parsedUrl.searchParams.get('channel') === 'true';
         const isGroup = parsedUrl.searchParams.get('isGroup') === 'true' || target.startsWith('group_');
+        const before = parsedUrl.searchParams.get('before') ? parseInt(parsedUrl.searchParams.get('before'), 10) : null;
+        const limit = Math.min(parseInt(parsedUrl.searchParams.get('limit') || '50', 10), 100);
 
         if (isChannel) {
-          const channelMessages = DB.getChannelHistory(target, 200);
+          const channelMessages = before
+            ? DB.getChannelHistoryBefore(target, before, limit)
+            : DB.getChannelHistory(target, limit);
           return res.end(JSON.stringify({ messages: channelMessages }));
         }
 
         if (isGroup) {
           const cleanGroupId = target.replace(/^group_/, '').trim();
-          const groupMessages = DB.getChatHistory('group_' + cleanGroupId, 300);
+          const groupMessages = before
+            ? DB.getChatHistoryBefore('group_' + cleanGroupId, before, limit)
+            : DB.getChatHistory('group_' + cleanGroupId, limit);
           return res.end(JSON.stringify({ messages: groupMessages }));
         }
 
@@ -1207,11 +1213,15 @@ const server = http.createServer(async (req, res) => {
         }
 
         const chatId = getDeterministicChatId(resolvedMe, resolvedTarget);
-        const messages = DB.getChatHistory(chatId, 300);
+        const messages = before
+          ? DB.getChatHistoryBefore(chatId, before, limit)
+          : DB.getChatHistory(chatId, limit);
 
-        // Mark incoming messages as read
-        DB.markChatRead(chatId, resolvedTarget);
-        broadcastToUser(resolvedTarget, 'messages_read', { by: resolvedMe, chatId });
+        // Mark incoming messages as read (only on initial active chat view, not when scrolling past history)
+        if (!before) {
+          DB.markChatRead(chatId, resolvedTarget);
+          broadcastToUser(resolvedTarget, 'messages_read', { by: resolvedMe, chatId });
+        }
 
         return res.end(JSON.stringify({ messages }));
       }
