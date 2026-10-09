@@ -1570,13 +1570,15 @@ const server = http.createServer(async (req, res) => {
         const initialMembers = Array.isArray(members) ? members : [];
         const creatorUser = DB.getUser(resolvedCreator);
 
-        // Process group avatar image if uploaded
+        // Process group avatar image (Option A: <= 500KB stored directly in SQLite)
         let processedAvatarImage = avatarImage || null;
         if (avatarImage && typeof avatarImage === 'string' && avatarImage.startsWith('data:')) {
-          try {
-            const diskFile = await saveBase64Media(avatarImage, 'photos', 'group_avatar.jpg', 'image/jpeg');
-            processedAvatarImage = diskFile.url;
-          } catch (_) {}
+          if (Buffer.byteLength(avatarImage, 'utf8') > 500 * 1024) {
+            try {
+              const diskFile = await saveBase64Media(avatarImage, 'photos', 'group_avatar.jpg', 'image/jpeg');
+              processedAvatarImage = diskFile.url;
+            } catch (_) {}
+          }
         }
 
         const group = DB.createGroup({
@@ -1814,12 +1816,15 @@ const server = http.createServer(async (req, res) => {
           return res.end(JSON.stringify({ error: 'You are not a member of this group.' }));
         }
 
+        // Process group avatar image (Option A: <= 500KB stored directly in SQLite)
         let processedAvatarImage = avatarImage;
         if (avatarImage && typeof avatarImage === 'string' && avatarImage.startsWith('data:')) {
-          try {
-            const diskFile = await saveBase64Media(avatarImage, 'photos', 'group_avatar.jpg', 'image/jpeg');
-            processedAvatarImage = diskFile.url;
-          } catch (_) {}
+          if (Buffer.byteLength(avatarImage, 'utf8') > 500 * 1024) {
+            try {
+              const diskFile = await saveBase64Media(avatarImage, 'photos', 'group_avatar.jpg', 'image/jpeg');
+              processedAvatarImage = diskFile.url;
+            } catch (_) {}
+          }
         }
 
         const updatedGroup = DB.updateGroup(cleanGroupId, {
@@ -2977,23 +2982,20 @@ const server = http.createServer(async (req, res) => {
           // Direct web or API image URL (e.g. Dicebear avatar URL)
           avatarUrl = image;
           DB.setUserAvatar(resolved, avatarUrl);
-        } else if (typeof image === 'string' && image.startsWith('data:image/svg+xml')) {
-          try {
-            const diskFile = await saveBase64Media(image, 'avatars', `${resolved}.svg`, 'image/svg+xml');
-            avatarUrl = diskFile.url;
-            DB.setUserAvatar(resolved, avatarUrl);
-          } catch (_) {
+        } else if (typeof image === 'string' && image.startsWith('data:')) {
+          // Option A: Store base64 strings directly in SQLite avatar_image column (no disk writes for avatars <= 500KB)
+          if (Buffer.byteLength(image, 'utf8') <= 500 * 1024) {
             avatarUrl = image;
             DB.setUserAvatar(resolved, avatarUrl);
-          }
-        } else {
-          try {
-            const diskFile = await saveBase64Media(image, 'avatars', `${resolved}.jpg`, 'image/jpeg');
-            avatarUrl = diskFile.url;
-            DB.setUserAvatar(resolved, avatarUrl);
-          } catch (imgErr) {
-            res.writeHead(400);
-            return res.end(JSON.stringify({ error: 'Failed to process image: ' + imgErr.message }));
+          } else {
+            try {
+              const diskFile = await saveBase64Media(image, 'avatars', `${resolved}.jpg`, 'image/jpeg');
+              avatarUrl = diskFile.url;
+              DB.setUserAvatar(resolved, avatarUrl);
+            } catch (imgErr) {
+              res.writeHead(400);
+              return res.end(JSON.stringify({ error: 'Failed to process image: ' + imgErr.message }));
+            }
           }
         }
 
@@ -3081,16 +3083,14 @@ const server = http.createServer(async (req, res) => {
         if (processedAvatarImage && typeof processedAvatarImage === 'string') {
           if (processedAvatarImage.startsWith('http://') || processedAvatarImage.startsWith('https://') || processedAvatarImage.startsWith('/api/uploads/')) {
             // Keep URL as-is
-          } else if (processedAvatarImage.startsWith('data:image/svg+xml')) {
-            try {
-              const diskFile = await saveBase64Media(processedAvatarImage, 'avatars', `${resolved}.svg`, 'image/svg+xml');
-              processedAvatarImage = diskFile.url;
-            } catch (_) {}
           } else if (processedAvatarImage.startsWith('data:')) {
-            try {
-              const diskFile = await saveBase64Media(processedAvatarImage, 'avatars', `${resolved}.jpg`, 'image/jpeg');
-              processedAvatarImage = diskFile.url;
-            } catch (_) {}
+            // Option A: If <= 500KB, store base64 directly in SQLite (no disk writes, persists across Render deploys)
+            if (Buffer.byteLength(processedAvatarImage, 'utf8') > 500 * 1024) {
+              try {
+                const diskFile = await saveBase64Media(processedAvatarImage, 'avatars', `${resolved}.jpg`, 'image/jpeg');
+                processedAvatarImage = diskFile.url;
+              } catch (_) {}
+            }
           }
         }
 
