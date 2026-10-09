@@ -1666,20 +1666,7 @@ function showMainScreen() {
   initCreateGroupModal();
   initGroupInfoActions();
 
-  // Background home screen sync every 3.5s when main screen is active
-  if (state.homeSyncInterval) clearInterval(state.homeSyncInterval);
-  state.homeSyncInterval = setInterval(() => {
-    if (!el.mainScreen.classList.contains('hidden')) {
-      if (state.activeTab === 'chats') loadRecentChats();
-      if (state.activeTab === 'friends') {
-        loadFriendRequests();
-        loadFriendsList();
-      }
-    }
-    if (state.currentUser) {
-      checkActiveCallFallback();
-    }
-  }, 3500);
+  // Pure SSE push architecture — background polling removed (handled via real-time SSE stream events)
 
   // Check and trigger First-Time User Experience (FTUX) Onboarding Wizard
   setTimeout(() => {
@@ -1825,6 +1812,11 @@ function connectEventSource() {
   });
 
   state.eventSource.addEventListener('new_message', (e) => {
+    const data = JSON.parse(e.data);
+    handleIncomingMessage(data);
+  });
+
+  state.eventSource.addEventListener('message_received', (e) => {
     const data = JSON.parse(e.data);
     handleIncomingMessage(data);
   });
@@ -3809,13 +3801,7 @@ async function openChat(target, title, isChannel = false, isOnline = false) {
   await fetchAndRenderChatMessages(true);
   loadPinnedMessages();
 
-  // Active sync loop: fetches any new messages every 700ms while chat screen is open (instant feel!)
-  state.chatSyncInterval = setInterval(() => {
-    if (!el.chatScreen.classList.contains('hidden') && state.currentChatTarget && !state.isGroup) {
-      fetchAndRenderChatMessages(false);
-      checkActiveCallFallback();
-    }
-  }, 700);
+  // Pure SSE push architecture — 700ms polling removed (new messages pushed in real time via SSE)
 }
 
 // Open WhatsApp-Style Group Chat
@@ -3877,11 +3863,7 @@ async function openGroupChat(groupId, groupName, avatarColor, avatarImage) {
   await fetchAndRenderChatMessages(true);
   loadPinnedMessages();
 
-  state.chatSyncInterval = setInterval(() => {
-    if (!el.chatScreen.classList.contains('hidden') && state.isGroup && state.currentGroupId === groupId) {
-      fetchAndRenderChatMessages(false);
-    }
-  }, 700);
+  // Pure SSE push architecture — 700ms polling removed (group messages pushed in real time via SSE)
 }
 
 // Update Group Chat Header Subtitle (Participant Names)
