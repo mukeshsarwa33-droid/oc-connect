@@ -779,9 +779,18 @@ const DB = {
   },
 
   updateUserProfile(username, data) {
-    const clean = (username || '').trim().toLowerCase().replace(/^@/, '');
+    let clean = (username || '').trim().toLowerCase().replace(/^@/, '');
     const user = this.getUser(clean);
     if (!user) return null;
+
+    // Support renaming username directly through profile update
+    if (data.newUsername) {
+      const newClean = data.newUsername.trim().toLowerCase().replace(/^@/, '');
+      if (newClean !== clean && /^[a-z0-9_]{3,20}$/.test(newClean) && !this.getUser(newClean)) {
+        this.renameUser(clean, newClean, data.displayName || user.displayName);
+        clean = newClean;
+      }
+    }
 
     if (data.displayName !== undefined && data.displayName !== null) {
       this.setUserDisplayName(clean, data.displayName.trim().slice(0, 40));
@@ -827,10 +836,10 @@ const DB = {
       const tempOcId = `${user.ocId}_renaming_${Date.now()}`;
       db.prepare('UPDATE users SET oc_id = ? WHERE username = ?').run(tempOcId, oldClean);
 
-      // 2. Insert new user record
+      // 2. Insert new user record preserving all student profile fields
       db.prepare(`
-        INSERT INTO users (username, oc_id, display_name, major, avatar_color, avatar_image, email, phone, online, last_seen, created_at, is_demo, is_trusted)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        INSERT INTO users (username, oc_id, display_name, major, avatar_color, avatar_image, email, phone, online, last_seen, created_at, is_demo, is_trusted, bio, campus, has_onboarded)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `).run(
         newClean,
         user.ocId,
@@ -844,7 +853,10 @@ const DB = {
         Date.now(),
         user.createdAt,
         user.isDemo ? 1 : 0,
-        user.isTrusted ? 1 : 0
+        user.isTrusted ? 1 : 0,
+        user.bio || '',
+        user.campus || 'Kelowna Campus (KLO)',
+        user.hasOnboarded ? 1 : 0
       );
 
       // 3. Migrate friends
@@ -854,6 +866,9 @@ const DB = {
       // 4. Migrate friend requests
       db.prepare('UPDATE friend_requests SET from_user = ? WHERE from_user = ?').run(newClean, oldClean);
       db.prepare('UPDATE friend_requests SET to_user = ? WHERE to_user = ?').run(newClean, oldClean);
+      if (newDisplayName) {
+        try { db.prepare('UPDATE friend_requests SET from_name = ? WHERE from_user = ?').run(newDisplayName, newClean); } catch(_) {}
+      }
 
       // 5. Migrate trust
       db.prepare('UPDATE trusted_users SET truster = ? WHERE truster = ?').run(newClean, oldClean);
@@ -885,7 +900,14 @@ const DB = {
         }
       }
 
-      // 10. Delete old user
+      // 10. Migrate pending notifications, pinned chats, starred messages, calls
+      try { db.prepare('UPDATE pending_notifications SET username = ? WHERE username = ?').run(newClean, oldClean); } catch(_) {}
+      try { db.prepare('UPDATE pinned_chats SET username = ? WHERE username = ?').run(newClean, oldClean); } catch(_) {}
+      try { db.prepare('UPDATE starred_messages SET username = ? WHERE username = ?').run(newClean, oldClean); } catch(_) {}
+      try { db.prepare('UPDATE calls SET caller = ? WHERE caller = ?').run(newClean, oldClean); } catch(_) {}
+      try { db.prepare('UPDATE calls SET callee = ? WHERE callee = ?').run(newClean, oldClean); } catch(_) {}
+
+      // 11. Delete old user record
       db.prepare('DELETE FROM users WHERE username = ?').run(oldClean);
 
       db.exec('COMMIT;');

@@ -711,53 +711,55 @@ const server = http.createServer(async (req, res) => {
         const newClean = (newUsername || '').trim().toLowerCase().replace(/^@/, '');
 
         if (!oldClean || !newClean) {
-          res.writeHead(400);
+          res.writeHead(400, { 'Content-Type': 'application/json' });
           return res.end(JSON.stringify({ error: 'Both current and new username are required.' }));
         }
 
         if (newClean.length < 3 || newClean.length > 20 || !/^[a-z0-9_]+$/.test(newClean)) {
-          res.writeHead(400);
+          res.writeHead(400, { 'Content-Type': 'application/json' });
           return res.end(JSON.stringify({ error: 'Username must be 3-20 characters and contain only letters, numbers, and underscores.' }));
         }
 
-        const existingUser = DB.getUser(oldClean);
+        const resolvedOld = resolveUsername(oldClean) || oldClean;
+        const existingUser = DB.getUser(resolvedOld);
         if (!existingUser) {
-          res.writeHead(404);
+          res.writeHead(404, { 'Content-Type': 'application/json' });
           return res.end(JSON.stringify({ error: 'Current user account not found.' }));
         }
 
-        if (oldClean !== newClean) {
+        if (resolvedOld !== newClean) {
           const taken = DB.getUser(newClean);
           if (taken) {
-            res.writeHead(409);
+            res.writeHead(409, { 'Content-Type': 'application/json' });
             return res.end(JSON.stringify({ error: `Username @${newClean} is already taken.` }));
           }
         }
 
         try {
-          const updatedUser = DB.renameUser(oldClean, newClean, newDisplayName);
+          const updatedUser = DB.renameUser(resolvedOld, newClean, newDisplayName);
 
           // Update SSE stream reference if open
-          if (sseConnections.has(oldClean)) {
-            const streams = sseConnections.get(oldClean);
-            sseConnections.delete(oldClean);
+          if (sseConnections.has(resolvedOld)) {
+            const streams = sseConnections.get(resolvedOld);
+            sseConnections.delete(resolvedOld);
             sseConnections.set(newClean, streams);
           }
 
           broadcastToAll('directory_updated', {
             renamedUser: {
-              oldUsername: oldClean,
+              oldUsername: resolvedOld,
               newUsername: newClean,
               displayName: updatedUser.displayName
             }
           });
 
+          res.writeHead(200, { 'Content-Type': 'application/json' });
           return res.end(JSON.stringify({
             success: true,
             user: updatedUser
           }));
         } catch (renameErr) {
-          res.writeHead(500);
+          res.writeHead(500, { 'Content-Type': 'application/json' });
           return res.end(JSON.stringify({ error: 'Could not change username: ' + renameErr.message }));
         }
       }
@@ -3125,20 +3127,20 @@ const server = http.createServer(async (req, res) => {
         }));
       }
 
-      // 24b. Unified Student Profile Update (Display Name, Major, Campus, Bio, Avatar Color, Photo)
+      // 24b. Unified Student Profile Update (Display Name, Username, Major, Campus, Bio, Avatar Color, Photo)
       if (pathname === '/api/users/profile' && req.method === 'POST') {
         const body = await parseJsonBody(req);
         const auth = getSessionFromRequest(req, parsedUrl);
         const resolved = (auth && auth.username) ? auth.username : resolveUsername(body.username);
 
         if (!resolved) {
-          res.writeHead(404);
+          res.writeHead(404, { 'Content-Type': 'application/json' });
           return res.end(JSON.stringify({ error: 'User not found' }));
         }
 
         const user = DB.getUser(resolved);
         if (!user) {
-          res.writeHead(404);
+          res.writeHead(404, { 'Content-Type': 'application/json' });
           return res.end(JSON.stringify({ error: 'User record not found in system' }));
         }
 
@@ -3158,7 +3160,24 @@ const server = http.createServer(async (req, res) => {
           }
         }
 
+        // Check for username handle update
+        let requestedNewUsername = body.newUsername ? body.newUsername.trim().toLowerCase().replace(/^@/, '') : null;
+        if (requestedNewUsername && requestedNewUsername !== resolved) {
+          if (requestedNewUsername.length < 3 || requestedNewUsername.length > 20 || !/^[a-z0-9_]+$/.test(requestedNewUsername)) {
+            res.writeHead(400, { 'Content-Type': 'application/json' });
+            return res.end(JSON.stringify({ error: 'Username must be 3-20 characters and contain only letters, numbers, and underscores.' }));
+          }
+          const taken = DB.getUser(requestedNewUsername);
+          if (taken) {
+            res.writeHead(409, { 'Content-Type': 'application/json' });
+            return res.end(JSON.stringify({ error: `Username @${requestedNewUsername} is already taken.` }));
+          }
+        } else {
+          requestedNewUsername = null;
+        }
+
         const updatedUser = DB.updateUserProfile(resolved, {
+          newUsername: requestedNewUsername,
           displayName: body.displayName,
           major: body.major,
           campus: body.campus,
@@ -3170,18 +3189,33 @@ const server = http.createServer(async (req, res) => {
           hasOnboarded: body.hasOnboarded
         });
 
+        const finalUsername = updatedUser ? updatedUser.username : (requestedNewUsername || resolved);
+
+        // Update active SSE connection keys if username changed
+        if (requestedNewUsername && sseConnections.has(resolved)) {
+          const streams = sseConnections.get(resolved);
+          sseConnections.delete(resolved);
+          sseConnections.set(finalUsername, streams);
+        }
+
         // Broadcast to ALL clients so directory, friends list, active chats, and group members update in real time
         broadcastToAll('directory_updated', {
-          updatedUser: updatedUser
+          updatedUser: updatedUser,
+          renamedUser: requestedNewUsername ? {
+            oldUsername: resolved,
+            newUsername: finalUsername,
+            displayName: updatedUser ? updatedUser.displayName : undefined
+          } : undefined
         });
 
-        const myFriends = DB.getFriends(resolved);
+        const myFriends = DB.getFriends(finalUsername);
         for (const f of myFriends) {
           broadcastToUser(f, 'user_updated', {
             user: updatedUser
           });
         }
 
+        res.writeHead(200, { 'Content-Type': 'application/json' });
         return res.end(JSON.stringify({
           success: true,
           user: updatedUser

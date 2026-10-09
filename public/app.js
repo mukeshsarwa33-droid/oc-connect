@@ -7787,6 +7787,7 @@ const elSettings = {
   btnSaveCampus: document.getElementById('btn-save-campus'),
   majorInput: document.getElementById('settings-major-input'),
   btnSaveMajor: document.getElementById('btn-save-major'),
+  btnSaveAll: document.getElementById('btn-save-all-settings'),
   btnShareMyProfile: document.getElementById('btn-share-my-profile'),
   ocidVal: document.getElementById('settings-ocid-val'),
   btnLogout: document.getElementById('btn-settings-logout'),
@@ -7806,7 +7807,7 @@ function openSettingsModal() {
   if (elSettings.displayNameInput) elSettings.displayNameInput.value = u.displayName || u.username || '';
   if (elSettings.bioInput) elSettings.bioInput.value = u.bio || '';
   if (elSettings.campusSelect) elSettings.campusSelect.value = u.campus || 'Kelowna Campus (KLO)';
-  if (elSettings.usernameInput) elSettings.usernameInput.value = '';
+  if (elSettings.usernameInput) elSettings.usernameInput.value = u.username || '';
   if (elSettings.majorInput) elSettings.majorInput.value = u.major || 'Okanagan College';
   if (elSettings.ocidVal) elSettings.ocidVal.textContent = u.ocId ? `${u.ocId}` : '••••••••';
 
@@ -7902,18 +7903,7 @@ if (userChipBtn) {
 if (elSettings.btnClose) {
   elSettings.btnClose.addEventListener('click', async () => {
     if (state.currentUser) {
-      if (elSettings.displayNameInput && elSettings.displayNameInput.value.trim() && elSettings.displayNameInput.value.trim() !== state.currentUser.displayName) {
-        await saveDisplayNameAction();
-      }
-      if (elSettings.majorInput && elSettings.majorInput.value.trim() && elSettings.majorInput.value.trim() !== state.currentUser.major) {
-        await saveMajorAction();
-      }
-      if (elSettings.bioInput && elSettings.bioInput.value.trim() !== (state.currentUser.bio || '')) {
-        await saveBioAction();
-      }
-      if (elSettings.campusSelect && elSettings.campusSelect.value !== state.currentUser.campus) {
-        await saveCampusAction();
-      }
+      await saveAllProfileSettingsAction();
     }
     closeModal(elSettings.modal);
   });
@@ -7924,18 +7914,7 @@ if (elSettings.modal) {
   elSettings.modal.addEventListener('click', async (e) => {
     if (e.target === elSettings.modal) {
       if (state.currentUser) {
-        if (elSettings.displayNameInput && elSettings.displayNameInput.value.trim() && elSettings.displayNameInput.value.trim() !== state.currentUser.displayName) {
-          await saveDisplayNameAction();
-        }
-        if (elSettings.majorInput && elSettings.majorInput.value.trim() && elSettings.majorInput.value.trim() !== state.currentUser.major) {
-          await saveMajorAction();
-        }
-        if (elSettings.bioInput && elSettings.bioInput.value.trim() !== (state.currentUser.bio || '')) {
-          await saveBioAction();
-        }
-        if (elSettings.campusSelect && elSettings.campusSelect.value !== state.currentUser.campus) {
-          await saveCampusAction();
-        }
+        await saveAllProfileSettingsAction();
       }
       closeModal(elSettings.modal);
     }
@@ -8030,47 +8009,87 @@ if (elSettings.btnRemoveAvatar) {
   });
 }
 
-// Helper to save display name
-async function saveDisplayNameAction() {
-  if (!state.currentUser || !elSettings.displayNameInput) return;
-  const newName = (elSettings.displayNameInput.value || '').trim();
-  if (!newName) { showToast('Display name cannot be empty.', '⚠️'); return; }
-  if (newName === state.currentUser.displayName) return;
+// Unified Master Save for All Student Profile & Account Settings
+async function saveAllProfileSettingsAction() {
+  if (!state.currentUser) return false;
+  const newName = (elSettings.displayNameInput ? elSettings.displayNameInput.value : '').trim() || state.currentUser.displayName;
+  const rawUsername = (elSettings.usernameInput ? elSettings.usernameInput.value : '').trim().toLowerCase().replace(/^@/, '');
+  const newBio = (elSettings.bioInput ? elSettings.bioInput.value : '').trim();
+  const newCampus = (elSettings.campusSelect ? elSettings.campusSelect.value : '') || state.currentUser.campus;
+  const newMajor = (elSettings.majorInput ? elSettings.majorInput.value : '').trim() || state.currentUser.major;
 
-  if (elSettings.btnSaveDisplayName) {
-    elSettings.btnSaveDisplayName.disabled = true;
-    elSettings.btnSaveDisplayName.textContent = 'Saving...';
+  if (elSettings.btnSaveAll) {
+    elSettings.btnSaveAll.disabled = true;
+    elSettings.btnSaveAll.textContent = 'Saving Changes... ⏳';
   }
 
   try {
+    const payload = {
+      username: state.currentUser.username,
+      displayName: newName,
+      bio: newBio,
+      campus: newCampus,
+      major: newMajor
+    };
+
+    if (rawUsername && rawUsername !== state.currentUser.username) {
+      if (!/^[a-z0-9_]{3,20}$/.test(rawUsername)) {
+        showToast('Username must be 3–20 letters, numbers, or underscores.', '⚠️');
+        return false;
+      }
+      payload.newUsername = rawUsername;
+    }
+
+    const token = localStorage.getItem('oc_connect_auth_token');
+    const headers = { 'Content-Type': 'application/json' };
+    if (token) headers['Authorization'] = 'Bearer ' + token;
+
     const res = await fetch('/api/users/profile', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        username: state.currentUser.username,
-        displayName: newName
-      })
+      headers: headers,
+      body: JSON.stringify(payload)
     });
     const data = await res.json();
     if (!res.ok) {
-      showToast(data.error || 'Failed to update name.', '❌');
-      return;
+      showToast(data.error || 'Failed to save profile changes.', '❌');
+      return false;
     }
 
-    state.currentUser.displayName = newName;
-    localStorage.setItem('oc_connect_user', JSON.stringify(state.currentUser));
-    updateAllMyAvatarInstances();
-    if (elSettings.cardName) elSettings.cardName.textContent = newName;
-    if (el.currentUserHandle) el.currentUserHandle.textContent = `@${state.currentUser.username}`;
-    showToast(`Display name saved: "${newName}" ✅`, '✏️');
+    if (data.user) {
+      const oldUsername = state.currentUser.username;
+      state.currentUser = data.user;
+      localStorage.setItem('oc_connect_user', JSON.stringify(data.user));
+
+      if (elSettings.cardName) elSettings.cardName.textContent = data.user.displayName || data.user.username;
+      if (elSettings.cardHandle) elSettings.cardHandle.textContent = `@${data.user.username}`;
+      if (el.currentUserHandle) el.currentUserHandle.textContent = `@${data.user.username}`;
+      if (elSettings.usernameInput) elSettings.usernameInput.value = data.user.username;
+      updateAllMyAvatarInstances();
+
+      if (payload.newUsername && oldUsername !== data.user.username) {
+        connectEventSource();
+        loadFriendsList();
+        loadCampusDirectory();
+        loadRecentChats();
+      }
+
+      showToast('Profile & account changes saved! ✅', '💾');
+      return true;
+    }
   } catch (err) {
-    showToast('Error saving display name: ' + err.message, '❌');
+    showToast('Error saving profile: ' + err.message, '❌');
+    return false;
   } finally {
-    if (elSettings.btnSaveDisplayName) {
-      elSettings.btnSaveDisplayName.disabled = false;
-      elSettings.btnSaveDisplayName.textContent = 'Save';
+    if (elSettings.btnSaveAll) {
+      elSettings.btnSaveAll.disabled = false;
+      elSettings.btnSaveAll.textContent = '💾 Save Profile Changes';
     }
   }
+}
+
+// Helper to save display name
+async function saveDisplayNameAction() {
+  await saveAllProfileSettingsAction();
 }
 
 // Helper to save program / major
@@ -8288,69 +8307,12 @@ if (elSettings.campusSelect) {
 
 // Helper to change username
 async function saveUsernameAction() {
-  if (!state.currentUser || !elSettings.usernameInput) return;
-  const newUsername = (elSettings.usernameInput.value || '').trim().toLowerCase().replace(/^@/, '');
-  if (!newUsername) { showToast('Please enter a new username.', '⚠️'); return; }
-  if (newUsername === state.currentUser.username) {
-    showToast('That is already your username.', 'ℹ️'); return;
-  }
-  if (!/^[a-z0-9_]+$/.test(newUsername)) {
-    showToast('Username may only contain letters, numbers, and underscores.', '⚠️'); return;
-  }
-  if (newUsername.length < 3 || newUsername.length > 20) {
-    showToast('Username must be 3–20 characters.', '⚠️'); return;
-  }
-  if (!confirm(`Change your username from @${state.currentUser.username} to @${newUsername}? Your chat history and friends list will be migrated.`)) return;
+  await saveAllProfileSettingsAction();
+}
 
-  if (elSettings.btnSaveUsername) {
-    elSettings.btnSaveUsername.textContent = 'Changing...';
-    elSettings.btnSaveUsername.disabled = true;
-  }
-
-  try {
-    const res = await fetch('/api/auth/change-username', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        currentUsername: state.currentUser.username,
-        newUsername: newUsername
-      })
-    });
-    const data = await res.json();
-    if (!res.ok) {
-      showToast(data.error || 'Could not change username.', '❌');
-      return;
-    }
-
-    // Update state and localStorage with new user object
-    state.currentUser = data.user;
-    localStorage.setItem('oc_connect_user', JSON.stringify(data.user));
-
-    // Update UI
-    if (el.currentUserHandle) el.currentUserHandle.textContent = `@${data.user.username}`;
-    if (elSettings.cardHandle) elSettings.cardHandle.textContent = `@${data.user.username}`;
-    if (elSettings.cardName) elSettings.cardName.textContent = data.user.displayName || data.user.username;
-    updateAllMyAvatarInstances();
-
-    // Reconnect SSE with new username
-    connectEventSource();
-
-    // Reload friends and directory
-    loadFriendsList();
-    loadCampusDirectory();
-    loadRecentChats();
-
-    elSettings.usernameInput.value = '';
-    closeModal(elSettings.modal);
-    showToast(`Username changed to @${data.user.username}! ✅`, '🎉');
-  } catch (err) {
-    showToast('Error changing username: ' + err.message, '❌');
-  } finally {
-    if (elSettings.btnSaveUsername) {
-      elSettings.btnSaveUsername.textContent = 'Change';
-      elSettings.btnSaveUsername.disabled = false;
-    }
-  }
+// Save All Profile & Account Settings Button
+if (elSettings.btnSaveAll) {
+  elSettings.btnSaveAll.addEventListener('click', saveAllProfileSettingsAction);
 }
 
 // Change username button & Enter key
