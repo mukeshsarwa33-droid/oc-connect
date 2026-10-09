@@ -2524,13 +2524,13 @@ const server = http.createServer(async (req, res) => {
         }
 
         const callId = 'call_' + Date.now() + '_' + Math.random().toString(36).substr(2, 6);
-        const callerUser = DB.getUser(resolvedCaller);
+        const callerUser = DB.getUser(resolvedCaller) || DB.findUser(resolvedCaller) || { displayName: resolvedCaller, avatarColor: getAvatarColor(resolvedCaller) };
 
         const callSession = {
           callId,
           caller: resolvedCaller,
-          callerName: callerUser.displayName,
-          callerAvatar: callerUser.avatarColor,
+          callerName: callerUser.displayName || resolvedCaller,
+          callerAvatar: callerUser.avatarColor || '#075E54',
           recipient: resolvedRecipient,
           status: 'ringing',
           startedAt: Date.now(),
@@ -2540,36 +2540,40 @@ const server = http.createServer(async (req, res) => {
           candidates: []
         };
         activeCalls.set(callId, callSession);
-        DB.saveCall(callSession);
+        try {
+          DB.saveCall(callSession);
+        } catch (callDbErr) {
+          console.warn('[CALL DB WARN]', callDbErr.message);
+        }
 
         broadcastToUser(resolvedRecipient, 'incoming_call', {
           callId,
           caller: resolvedCaller,
-          callerName: callerUser.displayName,
-          callerAvatar: callerUser.avatarColor
+          callerName: callerUser.displayName || resolvedCaller,
+          callerAvatar: callerUser.avatarColor || '#075E54'
         });
         broadcastToUser(resolvedRecipient, 'voice_call_incoming', {
           callId,
           caller: resolvedCaller,
-          callerName: callerUser.displayName,
-          callerAvatar: callerUser.avatarColor
+          callerName: callerUser.displayName || resolvedCaller,
+          callerAvatar: callerUser.avatarColor || '#075E54'
         });
 
         // Simulated accept for demo users
-        const recipientUser = DB.getUser(resolvedRecipient);
+        const recipientUser = DB.getUser(resolvedRecipient) || DB.findUser(resolvedRecipient);
         if (recipientUser && recipientUser.isDemo) {
           setTimeout(() => {
             const currentCall = activeCalls.get(callId);
             if (currentCall && currentCall.status === 'ringing') {
               currentCall.status = 'connected';
               currentCall.connectedAt = Date.now();
-              DB.updateCall(callId, 'connected', currentCall.connectedAt);
+              try { DB.updateCall(callId, 'connected', currentCall.connectedAt); } catch (_) {}
 
               const acceptPayload = {
                 callId,
                 recipient: resolvedRecipient,
                 call: currentCall,
-                demoVoicePrompt: `Hi there! I am ${recipientUser.displayName} from Okanagan College. Great connecting with you on OC Connect!`
+                demoVoicePrompt: `Hi there! I am ${recipientUser.displayName || resolvedRecipient} from Okanagan College. Great connecting with you on OC Connect!`
               };
 
               broadcastToUser(resolvedCaller, 'call_accepted', acceptPayload);
@@ -2646,23 +2650,28 @@ const server = http.createServer(async (req, res) => {
           const durSec = duration || (call.connectedAt ? Math.round((Date.now() - call.connectedAt) / 1000) : 0);
           const isMissed = (call.status === 'ringing');
 
-          const callMsg = DB.saveMessage({
-            id: 'msg_call_' + Date.now(),
-            sender: call.caller,
-            displayName: DB.getUser(call.caller).displayName,
-            text: '',
-            chatId: chatId,
-            call: {
-              callId: callId,
-              status: isMissed ? 'missed' : 'ended',
-              duration: durSec
-            },
-            timestamp: Date.now(),
-            status: 'read'
-          });
+          const callerData = DB.getUser(call.caller) || DB.findUser(call.caller) || { displayName: call.caller };
+          try {
+            const callMsg = DB.saveMessage({
+              id: 'msg_call_' + Date.now(),
+              sender: call.caller,
+              displayName: callerData.displayName || call.caller,
+              text: '',
+              chatId: chatId,
+              call: {
+                callId: callId,
+                status: isMissed ? 'missed' : 'ended',
+                duration: durSec
+              },
+              timestamp: Date.now(),
+              status: 'read'
+            });
 
-          broadcastToUser(call.caller, 'new_message', { sender: call.caller, chatId, message: callMsg });
-          broadcastToUser(call.recipient, 'new_message', { sender: call.caller, chatId, message: callMsg });
+            broadcastToUser(call.caller, 'new_message', { sender: call.caller, chatId, message: callMsg });
+            broadcastToUser(call.recipient, 'new_message', { sender: call.caller, chatId, message: callMsg });
+          } catch (callMsgErr) {
+            console.warn('[CALL MSG RECORD ERROR]', callMsgErr.message);
+          }
 
           activeCalls.delete(callId);
         }

@@ -603,7 +603,16 @@ const DB = {
   findUser(identifier) {
     if (!identifier) return null;
     const clean = identifier.trim().toLowerCase().replace(/^@/, '');
-    return this.getUser(clean) || this.getUserByOcId(clean) || this.getUserByEmail(clean) || this.getUserByPhone(clean);
+    const direct = this.getUser(clean) || this.getUserByOcId(clean) || this.getUserByEmail(clean) || this.getUserByPhone(clean);
+    if (direct) return direct;
+
+    // Check known student IDs and handle aliases
+    if (clean === 'aadi_test' || clean === 'aadi') return this.getUser('300363794');
+    if (clean === 'mukesh_sarwa' || clean === 'mukesh') return this.getUser('300354198') || this.getUser('mukesh');
+    if (clean === 'lucas') return this.getUser('lucas_smi_oc');
+    if (clean === 'emily') return this.getUser('emily_mar');
+
+    return null;
   },
 
   upsertUser(user) {
