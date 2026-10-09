@@ -2877,6 +2877,8 @@ function updateInboxItemOptimistic(chatKey, message, isGroup = false, groupTitle
       tick = '<span class="tick-icon read">✓✓</span> ';
     } else if (message.status === 'delivered') {
       tick = '<span class="tick-icon delivered">✓✓</span> ';
+    } else if (message.status === 'pending') {
+      tick = '<span class="tick-icon pending">🕒</span> ';
     } else {
       tick = '<span class="tick-icon sent">✓</span> ';
     }
@@ -4319,6 +4321,8 @@ function renderStatusTick(status) {
     return `<span class="msg-tick read" title="Read">✓✓</span>`;
   } else if (status === 'delivered') {
     return `<span class="msg-tick delivered" title="Delivered">✓✓</span>`;
+  } else if (status === 'pending') {
+    return `<span class="msg-tick pending" title="Sending...">🕒</span>`;
   }
   return `<span class="msg-tick sent" title="Sent">✓</span>`;
 }
@@ -5388,16 +5392,16 @@ async function sendStudyCardMessage(studyCard, optionalText = '') {
     showToast('Open a chat to share this card!', '💬');
     return;
   }
-  const tempId = 'temp_' + Date.now() + '_' + Math.random().toString(36).substr(2, 4);
-  state.renderedMsgIds.add(tempId);
+  const clientMsgId = 'msg_' + Date.now() + '_' + Math.random().toString(36).substr(2, 7);
+  state.renderedMsgIds.add(clientMsgId);
   const tempMsg = {
-    id: tempId,
+    id: clientMsgId,
     sender: state.currentUser.username,
     displayName: state.currentUser.displayName,
     text: optionalText,
     studyCard: studyCard,
     timestamp: Date.now(),
-    status: 'sent'
+    status: 'pending'
   };
   const emptyHint = document.getElementById('chat-empty-hint');
   if (emptyHint) emptyHint.remove();
@@ -5405,8 +5409,13 @@ async function sendStudyCardMessage(studyCard, optionalText = '') {
   scrollToBottom();
   playSentSound();
 
+  const sentKey = state.isGroup ? state.currentGroupId : state.currentChatTarget;
+  const normTargetKey = state.isGroup ? `group_${state.currentGroupId}` : (state.isChannel ? `channel_${state.currentChatTarget.toLowerCase()}` : `dm_${state.currentChatTarget.toLowerCase()}`);
+  LocalDeviceStore.appendMessage(normTargetKey, tempMsg);
+
   try {
     const body = {
+      id: clientMsgId,
       sender: state.currentUser.username,
       text: optionalText,
       studyCard: studyCard
@@ -5424,10 +5433,20 @@ async function sendStudyCardMessage(studyCard, optionalText = '') {
       body: JSON.stringify(body)
     });
     const data = await res.json();
-    if (data.message && data.message.id) {
-      state.renderedMsgIds.add(data.message.id);
-      const tempBubble = document.querySelector(`.message-bubble[data-msg-id="${tempId}"]`);
-      if (tempBubble) tempBubble.dataset.msgId = data.message.id;
+    if (!res.ok) {
+      showToast(data.error || 'Failed to deliver card', '⚠️');
+    } else {
+      tempMsg.status = 'sent';
+      LocalDeviceStore.appendMessage(normTargetKey, tempMsg);
+      const bubble = document.querySelector(`.message-bubble[data-msg-id="${clientMsgId}"]`);
+      if (bubble) {
+        const statusEl = bubble.querySelector('.imessage-status');
+        if (statusEl) {
+          const starBtn = bubble.querySelector('.msg-star-btn');
+          const starHtml = starBtn ? starBtn.outerHTML : '';
+          statusEl.innerHTML = `<span class="msg-tick sent" title="Sent">✓</span> ${starHtml}`;
+        }
+      }
     }
     loadRecentChats();
   } catch (err) {
@@ -5678,26 +5697,27 @@ async function sendMessage() {
   updateInputState();
   playSentSound();
 
-  const tempId = 'temp_' + Date.now() + '_' + Math.random().toString(36).substr(2, 4);
-  state.renderedMsgIds.add(tempId);
+  // Telegram-grade: Generate permanent client UUID upfront (eliminates race conditions & duplicate messages)
+  const clientMsgId = 'msg_' + Date.now() + '_' + Math.random().toString(36).substr(2, 7);
+  state.renderedMsgIds.add(clientMsgId);
 
   const replyContext = state.replyingTo ? { ...state.replyingTo } : null;
   cancelReply();
 
-  const tempMsg = {
-    id: tempId,
+  const newMsg = {
+    id: clientMsgId,
     sender: state.currentUser.username,
     displayName: state.currentUser.displayName,
     text: text,
     replyTo: replyContext,
     timestamp: Date.now(),
-    status: 'sent'
+    status: 'pending' // 🕒 Telegram optimistic pending indicator
   };
 
   const emptyHint = document.getElementById('chat-empty-hint');
   if (emptyHint) emptyHint.remove();
 
-  appendMessageToChat(tempMsg, true);
+  appendMessageToChat(newMsg, true);
   scrollToBottom();
   checkAndTriggerCelebrationEffect(text);
 
@@ -5705,10 +5725,11 @@ async function sendMessage() {
   const normTargetKey = state.isGroup ? `group_${state.currentGroupId}` : (state.isChannel ? `channel_${state.currentChatTarget.toLowerCase()}` : `dm_${state.currentChatTarget.toLowerCase()}`);
 
   // Persist immediately to user's device store (< 1ms)
-  LocalDeviceStore.appendMessage(normTargetKey, tempMsg);
-  updateInboxItemOptimistic(sentKey, tempMsg, state.isGroup, state.currentChatTarget);
+  LocalDeviceStore.appendMessage(normTargetKey, newMsg);
+  updateInboxItemOptimistic(sentKey, newMsg, state.isGroup, state.currentChatTarget);
 
   const body = {
+    id: clientMsgId,
     sender: state.currentUser.username,
     text: text,
     replyTo: replyContext
@@ -5732,20 +5753,23 @@ async function sendMessage() {
       showToast(data.error || 'Failed to deliver message', '⚠️');
       LocalDeviceStore.enqueueOfflineMessage(body);
     } else {
-      if (data.message && data.message.id) {
-        state.renderedMsgIds.add(data.message.id);
-        LocalDeviceStore.replaceMessage(normTargetKey, tempId, data.message);
-        const tempBubble = document.querySelector(`.message-bubble[data-msg-id="${tempId}"]`);
-        if (tempBubble) {
-          tempBubble.dataset.msgId = data.message.id;
+      // Transition from 🕒 pending to ✓ sent!
+      const bubble = document.querySelector(`.message-bubble[data-msg-id="${clientMsgId}"]`);
+      if (bubble) {
+        const statusEl = bubble.querySelector('.imessage-status');
+        if (statusEl && !statusEl.classList.contains('read') && !statusEl.classList.contains('delivered')) {
+          const starBtn = bubble.querySelector('.msg-star-btn');
+          const starHtml = starBtn ? starBtn.outerHTML : '';
+          statusEl.innerHTML = `<span class="msg-tick sent" title="Sent">✓</span> ${starHtml}`;
         }
       }
+      newMsg.status = 'sent';
+      LocalDeviceStore.appendMessage(normTargetKey, newMsg);
       loadRecentChats();
     }
   } catch (err) {
     // If offline or network dropped, enqueue for automatic background delivery
     LocalDeviceStore.enqueueOfflineMessage(body);
-    showToast('Saved on device. Will send automatically when online.', '📡');
   }
 }
 
@@ -5982,24 +6006,29 @@ if (el.btnAttachFile && el.universalFileInput) {
         };
       }
 
-      const tempId = 'temp_' + Date.now() + '_' + Math.random().toString(36).substring(2, 7);
-      state.renderedMsgIds.add(tempId);
+      const clientMsgId = 'msg_' + Date.now() + '_' + Math.random().toString(36).substring(2, 7);
+      state.renderedMsgIds.add(clientMsgId);
 
       const tempMsg = {
-        id: tempId,
+        id: clientMsgId,
         sender: state.currentUser.username,
         displayName: state.currentUser.displayName,
         text: '',
         image: imagePayload,
         file: filePayload,
         timestamp: Date.now(),
-        status: 'sent'
+        status: 'pending'
       };
 
       appendMessageToChat(tempMsg, true);
       scrollToBottom();
 
+      const sentKey = state.isGroup ? state.currentGroupId : state.currentChatTarget;
+      const normTargetKey = state.isGroup ? `group_${state.currentGroupId}` : (state.isChannel ? `channel_${state.currentChatTarget.toLowerCase()}` : `dm_${state.currentChatTarget.toLowerCase()}`);
+      LocalDeviceStore.appendMessage(normTargetKey, tempMsg);
+
       const body = {
+        id: clientMsgId,
         sender: state.currentUser.username,
         image: imagePayload,
         file: filePayload
@@ -6022,13 +6051,15 @@ if (el.btnAttachFile && el.universalFileInput) {
         if (!res.ok) {
           showToast(data.error || 'Failed to deliver attachment', '⚠️');
         } else {
-          if (data.message && data.message.id) {
-            state.renderedMsgIds.add(data.message.id);
-            const tempBubble = document.querySelector(`.message-bubble[data-msg-id="${tempId}"]`);
-            if (tempBubble) {
-              tempBubble.dataset.msgId = data.message.id;
-              const fc = tempBubble.querySelector('.file-card-clickable');
-              if (fc) fc.dataset.msgId = data.message.id;
+          tempMsg.status = 'sent';
+          LocalDeviceStore.appendMessage(normTargetKey, tempMsg);
+          const bubble = document.querySelector(`.message-bubble[data-msg-id="${clientMsgId}"]`);
+          if (bubble) {
+            const statusEl = bubble.querySelector('.imessage-status');
+            if (statusEl) {
+              const starBtn = bubble.querySelector('.msg-star-btn');
+              const starHtml = starBtn ? starBtn.outerHTML : '';
+              statusEl.innerHTML = `<span class="msg-tick sent" title="Sent">✓</span> ${starHtml}`;
             }
           }
           showToast(isImg ? 'Photo delivered!' : 'File delivered!', '✓');
@@ -6121,8 +6152,8 @@ function stopVoiceRecording(shouldSend = false) {
       const base64Audio = reader.result;
       playSentSound();
 
-      const tempId = 'temp_' + Date.now();
-      state.renderedMsgIds.add(tempId);
+      const clientMsgId = 'msg_' + Date.now() + '_' + Math.random().toString(36).substr(2, 7);
+      state.renderedMsgIds.add(clientMsgId);
 
       const voicePayload = {
         duration: durationSec,
@@ -6130,19 +6161,24 @@ function stopVoiceRecording(shouldSend = false) {
       };
 
       const tempMsg = {
-        id: tempId,
+        id: clientMsgId,
         sender: state.currentUser.username,
         displayName: state.currentUser.displayName,
         text: '',
         voice: voicePayload,
         timestamp: Date.now(),
-        status: 'sent'
+        status: 'pending'
       };
 
       appendMessageToChat(tempMsg, true);
       scrollToBottom();
 
+      const sentKey = state.isGroup ? state.currentGroupId : state.currentChatTarget;
+      const normTargetKey = state.isGroup ? `group_${state.currentGroupId}` : (state.isChannel ? `channel_${state.currentChatTarget.toLowerCase()}` : `dm_${state.currentChatTarget.toLowerCase()}`);
+      LocalDeviceStore.appendMessage(normTargetKey, tempMsg);
+
       const body = {
+        id: clientMsgId,
         sender: state.currentUser.username,
         voice: voicePayload
       };
@@ -6161,10 +6197,20 @@ function stopVoiceRecording(shouldSend = false) {
           body: JSON.stringify(body)
         });
         const data = await res.json();
-        if (data.message && data.message.id) {
-          state.renderedMsgIds.add(data.message.id);
-          const tempBubble = document.querySelector(`.message-bubble[data-msg-id="${tempId}"]`);
-          if (tempBubble) tempBubble.dataset.msgId = data.message.id;
+        if (!res.ok) {
+          showToast(data.error || 'Failed to deliver voice note', '⚠️');
+        } else {
+          tempMsg.status = 'sent';
+          LocalDeviceStore.appendMessage(normTargetKey, tempMsg);
+          const bubble = document.querySelector(`.message-bubble[data-msg-id="${clientMsgId}"]`);
+          if (bubble) {
+            const statusEl = bubble.querySelector('.imessage-status');
+            if (statusEl) {
+              const starBtn = bubble.querySelector('.msg-star-btn');
+              const starHtml = starBtn ? starBtn.outerHTML : '';
+              statusEl.innerHTML = `<span class="msg-tick sent" title="Sent">✓</span> ${starHtml}`;
+            }
+          }
         }
         loadRecentChats();
       } catch (err) {

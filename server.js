@@ -1344,7 +1344,7 @@ const server = http.createServer(async (req, res) => {
 
       // 11. Messages: Send Message (Supports 1-on-1, Channels, and WhatsApp-Style Groups)
       if (pathname === '/api/messages/send' && req.method === 'POST') {
-        const { sender, recipient, text, image, file, voice, studyCard, channel, groupId, replyTo } = await parseJsonBody(req);
+        const { sender, recipient, text, image, file, voice, studyCard, channel, groupId, replyTo, id } = await parseJsonBody(req);
         const resolvedSender = resolveUsername(sender);
         const cleanText = (text || '').trim();
 
@@ -1400,7 +1400,8 @@ const server = http.createServer(async (req, res) => {
           } catch (_) {}
         }
 
-        const msgId = 'msg_' + Date.now() + '_' + Math.random().toString(36).substr(2, 6);
+        // Telegram-grade: Use client permanent ID if provided, otherwise generate server ID
+        const msgId = (id && typeof id === 'string' && id.trim()) ? id.trim() : ('msg_' + Date.now() + '_' + Math.random().toString(36).substr(2, 6));
         const senderUser = DB.getUser(resolvedSender);
 
         // A. Group Message Flow

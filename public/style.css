@@ -1425,6 +1425,12 @@ button, .btn-send-ios, .chat-item, .nav-btn, .avatar-circle, .list-item {
   letter-spacing: -1.5px;
   user-select: none;
 }
+.msg-tick.pending, .tick-icon.pending {
+  color: #8e8e93;
+  opacity: 0.75;
+  font-size: 10px;
+  letter-spacing: normal;
+}
 .msg-tick.sent, .tick-icon.sent {
   color: #8e8e93;
 }

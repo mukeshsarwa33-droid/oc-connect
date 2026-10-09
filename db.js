@@ -343,7 +343,7 @@ const stmts = {
 
   // Messages
   insertMessage: db.prepare(`
-    INSERT INTO messages (id, chat_id, channel, sender, display_name, text, image, file_json, voice_json, study_card_json, call_json, reply_to_json, status, timestamp)
+    INSERT OR REPLACE INTO messages (id, chat_id, channel, sender, display_name, text, image, file_json, voice_json, study_card_json, call_json, reply_to_json, status, timestamp)
     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `),
   getChatHistory: db.prepare(`
