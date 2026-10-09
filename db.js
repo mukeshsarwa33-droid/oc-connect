@@ -287,9 +287,30 @@ const stmts = {
     LIMIT 1
   `),
   
-  // Friend Requests
-  getFriendRequests: db.prepare('SELECT * FROM friend_requests WHERE to_user = ? ORDER BY created_at DESC'),
-  getOutgoingRequests: db.prepare('SELECT * FROM friend_requests WHERE from_user = ? ORDER BY created_at DESC'),
+  // Friend Requests (Joined with Users table for real-time avatar and display name)
+  getFriendRequests: db.prepare(`
+    SELECT fr.id, fr.from_user, fr.created_at,
+           COALESCE(u.display_name, fr.from_name) AS from_name,
+           COALESCE(u.avatar_color, fr.avatar_color) AS avatar_color,
+           u.avatar_image,
+           COALESCE(u.major, fr.major) AS major
+    FROM friend_requests fr
+    LEFT JOIN users u ON u.username = fr.from_user
+    WHERE fr.to_user = ?
+    ORDER BY fr.created_at DESC
+  `),
+  getOutgoingRequests: db.prepare(`
+    SELECT fr.id, fr.to_user, fr.created_at,
+           COALESCE(u.display_name, fr.to_user) AS to_name,
+           COALESCE(u.avatar_color, '#007AFF') AS avatar_color,
+           u.avatar_image,
+           u.major
+    FROM friend_requests fr
+    LEFT JOIN users u ON u.username = fr.to_user
+    WHERE fr.from_user = ?
+    ORDER BY fr.created_at DESC
+  `),
+  hasFriendRequestPair: db.prepare('SELECT id FROM friend_requests WHERE from_user = ? AND to_user = ? LIMIT 1'),
   insertFriendRequest: db.prepare(`
     INSERT OR REPLACE INTO friend_requests (id, from_user, to_user, from_name, avatar_color, major, created_at)
     VALUES (?, ?, ?, ?, ?, ?, ?)
@@ -989,6 +1010,7 @@ const DB = {
       from: r.from_user,
       fromName: r.from_name,
       avatarColor: r.avatar_color,
+      avatarImage: r.avatar_image || null,
       major: r.major,
       timestamp: r.created_at
     }));
@@ -1000,13 +1022,24 @@ const DB = {
     return rows.map(r => ({
       id: r.id,
       to: r.to_user,
+      toName: r.to_name,
+      avatarColor: r.avatar_color,
+      avatarImage: r.avatar_image || null,
+      major: r.major,
       timestamp: r.created_at
     }));
+  },
+
+  hasFriendRequest(fromUser, toUser) {
+    const fromClean = fromUser.trim().toLowerCase().replace(/^@/, '');
+    const toClean = toUser.trim().toLowerCase().replace(/^@/, '');
+    return Boolean(stmts.hasFriendRequestPair.get(fromClean, toClean));
   },
 
   addFriendRequest(id, fromUser, toUser, fromName, avatarColor, major) {
     const fromClean = fromUser.trim().toLowerCase().replace(/^@/, '');
     const toClean = toUser.trim().toLowerCase().replace(/^@/, '');
+    stmts.deleteFriendRequestPair.run(fromClean, toClean);
     stmts.insertFriendRequest.run(id, fromClean, toClean, fromName || fromClean, avatarColor || '#007AFF', major || 'Okanagan College', Date.now());
   },
 

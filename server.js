@@ -929,7 +929,40 @@ const server = http.createServer(async (req, res) => {
         }
 
         if (DB.isFriend(resolvedFrom, resolvedTo)) {
-          return res.end(JSON.stringify({ success: true, message: 'Already friends' }));
+          return res.end(JSON.stringify({ success: true, message: 'Already friends', isFriend: true }));
+        }
+
+        // Mutual Friend Request: If target already requested you, instantly connect as friends!
+        if (DB.hasFriendRequest && DB.hasFriendRequest(resolvedTo, resolvedFrom)) {
+          DB.removeFriendRequestPair(resolvedTo, resolvedFrom);
+          DB.addFriend(resolvedFrom, resolvedTo);
+
+          const friendUser = DB.getUser(resolvedTo) || { username: resolvedTo, displayName: resolvedTo, avatarColor: '#075E54', online: false };
+          const meUser = DB.getUser(resolvedFrom) || { username: resolvedFrom, displayName: resolvedFrom, avatarColor: '#007AFF', online: true };
+
+          const acceptPayloadTo = { friend: { username: resolvedFrom, displayName: meUser.displayName, avatarColor: meUser.avatarColor, online: true } };
+          const acceptPayloadFrom = { friend: { username: resolvedTo, displayName: friendUser.displayName, avatarColor: friendUser.avatarColor, online: friendUser.online } };
+
+          broadcastToUser(resolvedTo, 'friend_accepted', acceptPayloadTo);
+          broadcastToUser(resolvedTo, 'friend_request_accepted', acceptPayloadTo);
+          broadcastToUser(resolvedFrom, 'friend_accepted', acceptPayloadFrom);
+          broadcastToUser(resolvedFrom, 'friend_request_accepted', acceptPayloadFrom);
+
+          return res.end(JSON.stringify({
+            success: true,
+            message: `Connected with @${resolvedTo}! 🎉`,
+            friendsNow: true,
+            friend: acceptPayloadFrom.friend
+          }));
+        }
+
+        // Prevent duplicate pending requests
+        if (DB.hasFriendRequest && DB.hasFriendRequest(resolvedFrom, resolvedTo)) {
+          return res.end(JSON.stringify({
+            success: true,
+            message: 'Friend request already sent',
+            alreadyRequested: true
+          }));
         }
 
         // Rate limit: max 60 friend requests per user per hour (supports classroom demo cohorts)
@@ -1019,6 +1052,8 @@ const server = http.createServer(async (req, res) => {
         const resolvedTo = resolveUsername(to);
         if (resolvedMe && resolvedTo) {
           DB.removeFriendRequestPair(resolvedMe, resolvedTo);
+          broadcastToUser(resolvedTo, 'friend_request_canceled', { from: resolvedMe });
+          broadcastToUser(resolvedMe, 'friend_request_canceled', { to: resolvedTo });
         }
         return res.end(JSON.stringify({ success: true }));
       }
@@ -1043,7 +1078,7 @@ const server = http.createServer(async (req, res) => {
         if (!reqObj) {
           // If already friends, return accepted status
           if (targetFrom && DB.isFriend(resolvedMe, targetFrom)) {
-            const friendUser = DB.getUser(targetFrom);
+            const friendUser = DB.getUser(targetFrom) || { username: targetFrom, displayName: targetFrom, avatarColor: '#075E54', online: false };
             return res.end(JSON.stringify({
               success: true,
               status: 'accepted',
@@ -1068,14 +1103,14 @@ const server = http.createServer(async (req, res) => {
 
         if (action === 'accept') {
           DB.addFriend(resolvedMe, resolvedFrom);
-          const friendUser = DB.getUser(resolvedFrom);
-          const meUser = DB.getUser(resolvedMe);
+          const friendUser = DB.getUser(resolvedFrom) || { username: resolvedFrom, displayName: resolvedFrom, avatarColor: '#075E54', online: false };
+          const meUser = DB.getUser(resolvedMe) || { username: resolvedMe, displayName: resolvedMe, avatarColor: '#007AFF', online: true };
 
           const acceptPayload = {
             friend: {
               username: resolvedMe,
-              displayName: meUser ? meUser.displayName : resolvedMe,
-              avatarColor: meUser ? meUser.avatarColor : '#007AFF',
+              displayName: meUser.displayName,
+              avatarColor: meUser.avatarColor,
               online: true
             }
           };
@@ -1190,7 +1225,9 @@ const server = http.createServer(async (req, res) => {
 
       // 9b. Friends: Unfriend Classmate
       if (pathname === '/api/friends/unfriend' && req.method === 'POST') {
-        const { me, target } = await parseJsonBody(req);
+        const body = await parseJsonBody(req);
+        const me = body.me || body.user1;
+        const target = body.target || body.user2;
         const resolvedMe = resolveUsername(me);
         const resolvedTarget = resolveUsername(target);
 
@@ -1209,7 +1246,9 @@ const server = http.createServer(async (req, res) => {
 
       // 9c. Friends: Block User
       if (pathname === '/api/friends/block' && req.method === 'POST') {
-        const { me, target } = await parseJsonBody(req);
+        const body = await parseJsonBody(req);
+        const me = body.me || body.blocker || body.user1;
+        const target = body.target || body.blocked || body.user2;
         const resolvedMe = resolveUsername(me);
         const resolvedTarget = resolveUsername(target);
 
@@ -1228,7 +1267,9 @@ const server = http.createServer(async (req, res) => {
 
       // 9d. Friends: Unblock User
       if (pathname === '/api/friends/unblock' && req.method === 'POST') {
-        const { me, target } = await parseJsonBody(req);
+        const body = await parseJsonBody(req);
+        const me = body.me || body.blocker || body.user1;
+        const target = body.target || body.blocked || body.user2;
         const resolvedMe = resolveUsername(me);
         const resolvedTarget = resolveUsername(target);
 

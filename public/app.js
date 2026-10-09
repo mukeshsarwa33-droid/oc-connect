@@ -181,6 +181,40 @@ const LocalDeviceStore = {
     }
   },
 
+  async replaceMessage(chatKey, oldId, newMessage) {
+    if (!chatKey || !oldId || !newMessage || !newMessage.id) return;
+    const normKey = String(chatKey).trim().toLowerCase();
+
+    let list = this.memCache.messages.get(normKey);
+    if (!list) list = [];
+    const idx = list.findIndex(m => m.id === oldId);
+    if (idx >= 0) {
+      list[idx] = newMessage;
+    } else {
+      const existingPerm = list.findIndex(m => m.id === newMessage.id);
+      if (existingPerm >= 0) list[existingPerm] = newMessage;
+      else list.push(newMessage);
+    }
+    this.memCache.messages.set(normKey, list);
+
+    try {
+      localStorage.setItem(`oc_msg_${normKey}`, JSON.stringify(list.slice(-150)));
+    } catch (_) {}
+
+    if (!this.db) await this.init();
+    if (this.db) {
+      try {
+        const tx = this.db.transaction('messages', 'readwrite');
+        const store = tx.objectStore('messages');
+        if (oldId !== newMessage.id) store.delete(oldId);
+        store.put({
+          ...newMessage,
+          chatKey: normKey
+        });
+      } catch (_) {}
+    }
+  },
+
   async getMessages(chatKey) {
     if (!chatKey) return [];
     const normKey = String(chatKey).trim().toLowerCase();
@@ -1882,6 +1916,10 @@ function connectEventSource() {
   };
   state.eventSource.addEventListener('friend_request_accepted', handleFriendAcceptedEvent);
   state.eventSource.addEventListener('friend_accepted', handleFriendAcceptedEvent);
+  state.eventSource.addEventListener('friend_request_canceled', () => {
+    loadFriendRequests();
+    loadCampusDirectory();
+  });
 
   state.eventSource.addEventListener('friend_removed', (e) => {
     try {
@@ -3347,6 +3385,12 @@ async function respondToRequest(fromUsername, action, requestId = null) {
     });
     const data = await res.json();
 
+    if (!res.ok) {
+      showToast(data.error || 'Failed to process request', '⚠️');
+      loadFriendRequests();
+      return;
+    }
+
     if (action === 'accept') {
       playReceivedSound();
       showToast(`Connected with @${fromUsername}! 🎉`, '🎉');
@@ -3357,6 +3401,7 @@ async function respondToRequest(fromUsername, action, requestId = null) {
     } else {
       showToast(`Declined request from @${fromUsername}`);
       loadFriendRequests();
+      loadCampusDirectory();
     }
   } catch (err) {
     showToast('Error responding to request: ' + err.message, '❌');
@@ -3377,6 +3422,9 @@ async function cancelFriendRequestAction(targetUsername) {
       showToast(`Canceled friend request to @${targetUsername}`);
       loadFriendRequests();
       loadCampusDirectory();
+    } else {
+      const data = await res.json().catch(() => ({}));
+      showToast(data.error || 'Failed to cancel request', '⚠️');
     }
   } catch (err) {
     showToast('Error canceling request: ' + err.message, '❌');
@@ -3401,7 +3449,16 @@ async function sendFriendRequestAction(targetUsername) {
       return;
     }
 
-    showToast(`Friend request sent to @${targetUsername}!`, '📬');
+    if (data.friendsNow) {
+      playReceivedSound();
+      showToast(`Connected with @${targetUsername}! 🎉`, '🎉');
+      loadFriendsList();
+      loadRecentChats();
+      loadFriendRequests();
+    } else {
+      showToast(data.message || `Friend request sent to @${targetUsername}!`, '📬');
+      loadFriendRequests();
+    }
     loadCampusDirectory();
   } catch (err) {
     showToast('Error sending request: ' + err.message, '❌');
@@ -3983,7 +4040,8 @@ async function openChat(target, title, isChannel = false, isOnline = false) {
 
   // Instant local device storage load (< 2ms) using canonical key
   const normChatKey = getCanonicalChatKey(cleanTarget, false, isChannel);
-  LocalDeviceStore.getMessages(normChatKey).then(cachedDirect => {
+  try {
+    const cachedDirect = await LocalDeviceStore.getMessages(normChatKey);
     if (cachedDirect && Array.isArray(cachedDirect) && cachedDirect.length > 0 && state.currentChatTarget === cleanTarget) {
       if (el.messagesContainer) el.messagesContainer.innerHTML = '';
       state.renderedMsgIds.clear();
@@ -3995,7 +4053,7 @@ async function openChat(target, title, isChannel = false, isOnline = false) {
       });
       scrollToBottom(false);
     }
-  });
+  } catch (_) {}
 
   // Initial server reconcile
   await fetchAndRenderChatMessages(true);
@@ -5676,7 +5734,7 @@ async function sendMessage() {
     } else {
       if (data.message && data.message.id) {
         state.renderedMsgIds.add(data.message.id);
-        LocalDeviceStore.appendMessage(normTargetKey, data.message);
+        LocalDeviceStore.replaceMessage(normTargetKey, tempId, data.message);
         const tempBubble = document.querySelector(`.message-bubble[data-msg-id="${tempId}"]`);
         if (tempBubble) {
           tempBubble.dataset.msgId = data.message.id;
@@ -6906,6 +6964,8 @@ async function handleUnfriendClassmate(target) {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
+        me: state.currentUser.username,
+        target: cleanTarget,
         user1: state.currentUser.username,
         user2: cleanTarget
       })
@@ -6936,6 +6996,8 @@ async function handleToggleBlockClassmate(target, currentBlockedState) {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
+          me: state.currentUser.username,
+          target: cleanTarget,
           blocker: state.currentUser.username,
           blocked: cleanTarget
         })
@@ -6963,6 +7025,8 @@ async function handleToggleBlockClassmate(target, currentBlockedState) {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
+          me: state.currentUser.username,
+          target: cleanTarget,
           blocker: state.currentUser.username,
           blocked: cleanTarget
         })
