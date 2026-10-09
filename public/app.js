@@ -1408,10 +1408,17 @@ window.addEventListener('DOMContentLoaded', async () => {
           if (res.ok) {
             return res.json();
           } else if (res.status === 401) {
-            // Session revoked or expired on server
+            // Session revoked or expired on server: smoothly reset to login without infinite reload loop
             localStorage.removeItem('oc_connect_auth_token');
             localStorage.removeItem('oc_connect_user');
-            location.reload();
+            state.currentUser = null;
+            if (el.authScreen) el.authScreen.classList.remove('hidden');
+            if (el.mainScreen) el.mainScreen.classList.add('hidden');
+            if (el.chatScreen) {
+              el.chatScreen.classList.add('hidden');
+              el.chatScreen.classList.remove('open');
+            }
+            showToast('Session expired. Please sign in again.', '🔒');
           }
         }).then(data => {
           if (data && data.user) {
@@ -1473,6 +1480,8 @@ function showMainScreen() {
 
   // Start real-time stream
   connectEventSource();
+  requestNotificationPermissionPrompt();
+  recalculateGlobalUnread();
 
   // Load initial data
   loadRecentChats();
@@ -1725,49 +1734,58 @@ function connectEventSource() {
     loadCampusDirectory();
   });
 
-  state.eventSource.addEventListener('voice_call_incoming', (e) => {
-    const data = JSON.parse(e.data);
-    playRingtoneSound();
-    state.activeCall = {
-      callId: data.callId,
-      partner: data.caller,
-      partnerName: data.callerName || data.caller,
-      role: 'callee',
-      status: 'ringing',
-      seconds: 0
-    };
-    el.callerName.textContent = data.callerName || data.caller;
-    el.callerAvatar.textContent = (data.callerName || data.caller).charAt(0).toUpperCase();
-    if (data.callerAvatar) el.callerAvatar.style.backgroundColor = data.callerAvatar;
-    openModal(el.modalIncomingCall);
-  });
+  const handleIncomingCallEvent = (e) => {
+    try {
+      const data = JSON.parse(e.data);
+      playRingtoneSound();
+      state.activeCall = {
+        callId: data.callId,
+        partner: data.caller,
+        partnerName: data.callerName || data.caller,
+        role: 'callee',
+        status: 'ringing',
+        seconds: 0
+      };
+      el.callerName.textContent = data.callerName || data.caller;
+      el.callerAvatar.textContent = (data.callerName || data.caller).charAt(0).toUpperCase();
+      if (data.callerAvatar) el.callerAvatar.style.backgroundColor = data.callerAvatar;
+      openModal(el.modalIncomingCall);
+    } catch (_) {}
+  };
+  state.eventSource.addEventListener('voice_call_incoming', handleIncomingCallEvent);
+  state.eventSource.addEventListener('incoming_call', handleIncomingCallEvent);
 
-  state.eventSource.addEventListener('voice_call_signal', (e) => {
+  const handleCallSignalEvent = (e) => {
     try {
       const payload = JSON.parse(e.data);
       handleCallSignal(payload);
     } catch (_) {}
-  });
+  };
+  state.eventSource.addEventListener('voice_call_signal', handleCallSignalEvent);
+  state.eventSource.addEventListener('call_signal', handleCallSignalEvent);
 
-  state.eventSource.addEventListener('voice_call_accepted', (e) => {
-    const data = JSON.parse(e.data);
-    playCallConnectedSound();
-    if (state.activeCall && state.activeCall.callId === data.callId) {
-      state.activeCall.status = 'connected';
-      el.activeCallStatus.textContent = 'Connected - Voice Call';
-      el.activeCallStatus.style.color = '#34C759';
-      el.activeCallTimer.classList.remove('hidden');
-      startCallTimer();
-      showToast('Voice call connected!', '📞');
-      startCallAudioRelay();
-    }
-  });
+  const handleCallAcceptedEvent = (e) => {
+    try {
+      const data = JSON.parse(e.data);
+      playCallConnectedSound();
+      if (state.activeCall && state.activeCall.callId === data.callId) {
+        state.activeCall.status = 'connected';
+        el.activeCallStatus.textContent = 'Connected - Voice Call';
+        el.activeCallStatus.style.color = '#34C759';
+        el.activeCallTimer.classList.remove('hidden');
+        startCallTimer();
+        showToast('Voice call connected!', '📞');
+        startCallAudioRelay();
+      }
+    } catch (_) {}
+  };
+  state.eventSource.addEventListener('voice_call_accepted', handleCallAcceptedEvent);
+  state.eventSource.addEventListener('call_accepted', handleCallAcceptedEvent);
 
-  state.eventSource.addEventListener('voice_call_audio_chunk', (e) => {
+  const handleCallAudioChunkEvent = (e) => {
     try {
       const data = JSON.parse(e.data);
       if (!state.activeCall || state.activeCall.callId !== data.callId) return;
-      // If WebRTC direct P2P is already flowing, ignore server chunk to avoid echo
       if (state.peerConnection && (state.peerConnection.iceConnectionState === 'connected' || state.peerConnection.iceConnectionState === 'completed')) {
         return;
       }
@@ -1777,32 +1795,42 @@ function connectEventSource() {
         audio.play().catch(() => {});
       }
     } catch (_) {}
-  });
+  };
+  state.eventSource.addEventListener('voice_call_audio_chunk', handleCallAudioChunkEvent);
+  state.eventSource.addEventListener('call_audio_chunk', handleCallAudioChunkEvent);
 
-  state.eventSource.addEventListener('voice_call_declined', (e) => {
-    const data = JSON.parse(e.data);
-    if (state.activeCall && state.activeCall.callId === data.callId) {
-      el.activeCallStatus.textContent = 'Call Declined';
-      el.activeCallStatus.style.color = '#FF3B30';
-      showToast(`@${data.responder} declined the voice call`, '📞');
-      setTimeout(() => {
+  const handleCallDeclinedEvent = (e) => {
+    try {
+      const data = JSON.parse(e.data);
+      if (state.activeCall && state.activeCall.callId === data.callId) {
+        el.activeCallStatus.textContent = 'Call Declined';
+        el.activeCallStatus.style.color = '#FF3B30';
+        showToast(`@${data.responder} declined the voice call`, '📞');
+        setTimeout(() => {
+          cleanupCall();
+          if (state.currentChatTarget) fetchAndRenderChatMessages(false);
+          loadRecentChats();
+        }, 1500);
+      }
+    } catch (_) {}
+  };
+  state.eventSource.addEventListener('voice_call_declined', handleCallDeclinedEvent);
+  state.eventSource.addEventListener('call_declined', handleCallDeclinedEvent);
+
+  const handleCallEndedEvent = (e) => {
+    try {
+      const data = JSON.parse(e.data);
+      if (state.activeCall && state.activeCall.callId === data.callId) {
+        el.activeCallStatus.textContent = 'Call Ended';
+        showToast('Call ended by partner', '📞');
         cleanupCall();
         if (state.currentChatTarget) fetchAndRenderChatMessages(false);
         loadRecentChats();
-      }, 1500);
-    }
-  });
-
-  state.eventSource.addEventListener('voice_call_ended', (e) => {
-    const data = JSON.parse(e.data);
-    if (state.activeCall && state.activeCall.callId === data.callId) {
-      el.activeCallStatus.textContent = 'Call Ended';
-      showToast('Call ended by partner', '📞');
-      cleanupCall();
-      if (state.currentChatTarget) fetchAndRenderChatMessages(false);
-      loadRecentChats();
-    }
-  });
+      }
+    } catch (_) {}
+  };
+  state.eventSource.addEventListener('voice_call_ended', handleCallEndedEvent);
+  state.eventSource.addEventListener('call_ended', handleCallEndedEvent);
 
   state.eventSource.onerror = () => {
     el.connectionStatus.textContent = '○ Reconnecting...';
@@ -1883,16 +1911,187 @@ if (el.toggleMessagePreviews) {
   });
 }
 
-function showNativePushNotification(title, body, targetUsername, isChannel = false, isGroup = false, groupName = '') {
+// Canonical chat key standardizer for LocalDeviceStore and UI routing
+function getCanonicalChatKey(target, isGroup = false, isChannel = false) {
+  if (!target) return '';
+  const clean = String(target).trim().toLowerCase().replace(/^@/, '');
+  if (isGroup) return `group_${clean.replace(/^group_/, '')}`;
+  if (isChannel) return `channel_${clean.replace(/^channel_/, '')}`;
+  return `dm_${clean.replace(/^dm_/, '')}`;
+}
+
+// App Icon Badge & Dynamic Favicon Badge Manager
+function updateAppIconBadge(count) {
+  const unread = Math.max(0, parseInt(count, 10) || 0);
+
+  // 1. App Badging API for PWA Standalone on Android & iOS 16.4+ home screen
+  if ('setAppBadge' in navigator) {
+    if (unread > 0) {
+      navigator.setAppBadge(unread).catch(() => {});
+    } else {
+      navigator.clearAppBadge().catch(() => {});
+    }
+  }
+
+  // 2. Dynamic red notification circle on favicon
+  try {
+    drawFaviconBadge(unread);
+  } catch (_) {}
+
+  // 3. Document Title Notification (e.g., "(3) OC Connect")
+  if (unread > 0) {
+    document.title = `(${unread}) OC Connect`;
+  } else {
+    document.title = 'OC Connect';
+  }
+
+  // 4. In-App Navigation Tabs Badge
+  if (el.chatsBadge) {
+    if (unread > 0) {
+      el.chatsBadge.textContent = unread > 99 ? '99+' : unread;
+      el.chatsBadge.classList.remove('hidden');
+    } else {
+      el.chatsBadge.classList.add('hidden');
+    }
+  }
+}
+
+function drawFaviconBadge(count) {
+  let favicon = document.querySelector("link[rel*='icon']");
+  if (!favicon) {
+    favicon = document.createElement('link');
+    favicon.rel = 'icon';
+    document.head.appendChild(favicon);
+  }
+
+  if (count <= 0) {
+    favicon.href = '/icons/icon.svg';
+    return;
+  }
+
+  const canvas = document.createElement('canvas');
+  canvas.width = 64;
+  canvas.height = 64;
+  const ctx = canvas.getContext('2d');
+  if (!ctx) return;
+
+  const img = new Image();
+  img.crossOrigin = 'anonymous';
+  img.src = '/icons/icon-192.png';
+  img.onload = () => {
+    ctx.drawImage(img, 0, 0, 64, 64);
+
+    // Draw notification badge pill
+    const badgeText = count > 99 ? '99+' : String(count);
+    ctx.fillStyle = '#FF3B30';
+    ctx.beginPath();
+    ctx.arc(46, 18, 16, 0, 2 * Math.PI);
+    ctx.fill();
+
+    ctx.lineWidth = 3;
+    ctx.strokeStyle = '#FFFFFF';
+    ctx.stroke();
+
+    ctx.fillStyle = '#FFFFFF';
+    ctx.font = 'bold 16px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(badgeText, 46, 18);
+
+    favicon.href = canvas.toDataURL('image/png');
+  };
+  img.onerror = () => {
+    favicon.href = '/icons/icon.svg';
+  };
+}
+
+function recalculateGlobalUnread() {
+  let total = 0;
+  if (el.chatsList) {
+    const badges = el.chatsList.querySelectorAll('.unread-count-pill');
+    badges.forEach(b => {
+      const num = parseInt(b.textContent, 10);
+      if (!isNaN(num) && num > 0) total += num;
+    });
+  }
+  if (total === 0 && Array.isArray(state.friends)) {
+    total = state.friends.reduce((acc, f) => acc + (f.unreadCount || 0), 0);
+  }
+  updateAppIconBadge(total);
+  return total;
+}
+
+// Auto-request notification permission on first interaction / login
+async function requestNotificationPermissionPrompt() {
+  if ('Notification' in window && Notification.permission === 'default') {
+    try {
+      const perm = await Notification.requestPermission();
+      if (perm === 'granted') {
+        localStorage.setItem('oc_notify_push', 'true');
+        if (el.togglePushNotifications) el.togglePushNotifications.checked = true;
+      }
+    } catch (_) {}
+  }
+}
+
+// Listen to service worker notification click open events
+if ('serviceWorker' in navigator) {
+  navigator.serviceWorker.addEventListener('message', (event) => {
+    if (event.data && event.data.type === 'OPEN_CHAT_TARGET') {
+      const { target, title, isChannel, isGroup, groupName } = event.data;
+      if (isGroup) {
+        openGroupChat(target, groupName || title);
+      } else if (target) {
+        openChat(target, title || target, isChannel);
+      }
+    }
+  });
+}
+
+// Push notification that works on lock screen, Android notification tray, iOS PWA & desktop
+async function showNativePushNotification(title, body, targetUsername, isChannel = false, isGroup = false, groupName = '') {
   const prefs = getNotificationPrefs();
   if (!prefs.push || !('Notification' in window) || Notification.permission !== 'granted') return;
+
+  const notifBody = prefs.preview ? (body || 'New message received') : 'New message received';
+  const tag = `oc_${targetUsername || 'chat'}`;
+  const iconUrl = '/icons/icon-192.png';
+  const badgeUrl = '/icons/icon-192.png';
+
+  const options = {
+    body: notifBody,
+    icon: iconUrl,
+    badge: badgeUrl,
+    tag: tag,
+    renotify: true,
+    vibrate: [200, 100, 200],
+    data: {
+      targetUsername: targetUsername || '',
+      title: title || '',
+      isChannel: Boolean(isChannel),
+      isGroup: Boolean(isGroup),
+      groupName: groupName || ''
+    },
+    actions: [
+      { action: 'open', title: 'Open Chat 💬' },
+      { action: 'close', title: 'Dismiss' }
+    ]
+  };
+
+  // 1. Try Service Worker showNotification (Essential for mobile notification bar & lockscreen)
+  if ('serviceWorker' in navigator) {
+    try {
+      const reg = await navigator.serviceWorker.ready;
+      if (reg && reg.showNotification) {
+        await reg.showNotification(title, options);
+        return;
+      }
+    } catch (_) {}
+  }
+
+  // 2. Desktop Browser fallback (new Notification)
   try {
-    const notif = new Notification(title, {
-      body: prefs.preview ? (body || 'New message received') : 'New message received',
-      icon: 'data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><circle cx=%2250%22 cy=%2250%22 r=%2248%22 fill=%22%23075E54%22/><text x=%2250%22 y=%2264%22 font-size=%2244%22 text-anchor=%22middle%22 fill=%22white%22 font-family=%22sans-serif%22 font-weight=%22bold%22>OC</text></svg>',
-      tag: `oc_${targetUsername || 'chat'}`,
-      renotify: true
-    });
+    const notif = new Notification(title, options);
     notif.onclick = () => {
       window.focus();
       if (isGroup) {
@@ -1996,6 +2195,7 @@ function updateInboxItemOptimistic(chatKey, message, isGroup = false, groupTitle
         const count = parseInt(badge.textContent, 10) || 0;
         badge.textContent = String(count + 1);
       }
+      recalculateGlobalUnread();
     }
 
     // Bump to top of list
@@ -2548,16 +2748,9 @@ async function loadRecentChats() {
       return b.sortTime - a.sortTime;
     });
 
-    // Update global unread badge on Chats tab
+    // Update global unread badge on app icon and Chats tab
     const totalUnread = friends.reduce((acc, c) => acc + (c.unreadCount || 0), 0);
-    if (el.chatsBadge) {
-      if (totalUnread > 0) {
-        el.chatsBadge.textContent = totalUnread;
-        el.chatsBadge.classList.remove('hidden');
-      } else {
-        el.chatsBadge.classList.add('hidden');
-      }
-    }
+    updateAppIconBadge(totalUnread);
 
     renderRecentChatsList(mergedList);
   } catch (err) {
@@ -2741,6 +2934,7 @@ async function openChat(target, title, isChannel = false, isOnline = false) {
   state.isChannel = isChannel;
   state.isGroup = false;
   state.currentGroupId = null;
+  if (el.messagesContainer) el.messagesContainer.innerHTML = '';
   state.renderedMsgIds.clear();
 
   // Smooth Native iOS Navigation Slide-In
@@ -2764,15 +2958,7 @@ async function openChat(target, title, isChannel = false, isOnline = false) {
   const friendObj = state.friends.find(f => f.username.toLowerCase() === cleanTarget);
   if (friendObj) {
     friendObj.unreadCount = 0;
-    const totalUnread = state.friends.reduce((acc, f) => acc + (f.unreadCount || 0), 0);
-    if (el.chatsBadge) {
-      if (totalUnread > 0) {
-        el.chatsBadge.textContent = totalUnread;
-        el.chatsBadge.classList.remove('hidden');
-      } else {
-        el.chatsBadge.classList.add('hidden');
-      }
-    }
+    recalculateGlobalUnread();
   }
 
   if (isChannel) {
@@ -2788,11 +2974,11 @@ async function openChat(target, title, isChannel = false, isOnline = false) {
     updateInputState();
   }
 
-  // Instant local device storage load (< 2ms)
-  const normChatKey = isChannel ? `channel_${cleanTarget}` : `dm_${cleanTarget}`;
+  // Instant local device storage load (< 2ms) using canonical key
+  const normChatKey = getCanonicalChatKey(cleanTarget, false, isChannel);
   LocalDeviceStore.getMessages(normChatKey).then(cachedDirect => {
     if (cachedDirect && Array.isArray(cachedDirect) && cachedDirect.length > 0 && state.currentChatTarget === cleanTarget) {
-      el.messagesContainer.innerHTML = '';
+      if (el.messagesContainer) el.messagesContainer.innerHTML = '';
       state.renderedMsgIds.clear();
       cachedDirect.forEach(m => {
         const mSender = (m.sender || '').trim().toLowerCase().replace(/^@/, '');
@@ -2829,6 +3015,7 @@ async function openGroupChat(groupId, groupName, avatarColor, avatarImage) {
   state.isGroup = true;
   state.isChannel = false;
   state.currentGroupId = groupId;
+  if (el.messagesContainer) el.messagesContainer.innerHTML = '';
   state.renderedMsgIds.clear();
 
   el.mainScreen.classList.add('chat-open');
@@ -2857,10 +3044,10 @@ async function openGroupChat(groupId, groupName, avatarColor, avatarImage) {
   }
 
   // Instant local device storage load for group (< 2ms)
-  const normGroupKey = `group_${groupId}`;
+  const normGroupKey = getCanonicalChatKey(groupId, true, false);
   LocalDeviceStore.getMessages(normGroupKey).then(cachedGroup => {
     if (cachedGroup && Array.isArray(cachedGroup) && cachedGroup.length > 0 && state.currentGroupId === groupId) {
-      el.messagesContainer.innerHTML = '';
+      if (el.messagesContainer) el.messagesContainer.innerHTML = '';
       state.renderedMsgIds.clear();
       cachedGroup.forEach(m => {
         const mSender = (m.sender || '').trim().toLowerCase().replace(/^@/, '');
@@ -2902,7 +3089,7 @@ async function updateGroupChatHeaderSubtitle(groupId) {
 async function fetchAndRenderChatMessages(isInitial = false) {
   if (!state.currentChatTarget || !state.currentUser) return;
 
-  const targetKey = state.isGroup ? `group_${state.currentGroupId}` : state.currentChatTarget.toLowerCase();
+  const targetKey = getCanonicalChatKey(state.currentChatTarget, state.isGroup, state.isChannel);
   const offlineKey = `messages_${targetKey}`;
 
   // If browser is offline, reveal offline banner and load cache
@@ -6553,7 +6740,7 @@ el.btnLogout.addEventListener('click', async () => {
   }
 });
 
-// Resume stream & sync instantly when user switches back to browser tab
+// Resume stream & sync instantly when user switches back to browser tab or wakes device
 document.addEventListener('visibilitychange', () => {
   if (document.visibilityState === 'visible' && state.currentUser) {
     if (!el.chatScreen.classList.contains('hidden') && state.currentChatTarget) {
@@ -6563,7 +6750,9 @@ document.addEventListener('visibilitychange', () => {
       loadFriendRequests();
       loadFriendsList();
     }
-    if (!state.eventSource || state.eventSource.readyState === EventSource.CLOSED) {
+    recalculateGlobalUnread();
+    checkActiveCallFallback();
+    if (!state.eventSource || state.eventSource.readyState !== 1) {
       connectEventSource();
     }
   }

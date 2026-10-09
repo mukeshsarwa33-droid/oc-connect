@@ -2180,6 +2180,12 @@ const server = http.createServer(async (req, res) => {
           callerName: callerUser.displayName,
           callerAvatar: callerUser.avatarColor
         });
+        broadcastToUser(resolvedRecipient, 'voice_call_incoming', {
+          callId,
+          caller: resolvedCaller,
+          callerName: callerUser.displayName,
+          callerAvatar: callerUser.avatarColor
+        });
 
         // Simulated accept for demo users
         const recipientUser = DB.getUser(resolvedRecipient);
@@ -2192,6 +2198,11 @@ const server = http.createServer(async (req, res) => {
               DB.updateCall(callId, 'connected', currentCall.connectedAt);
 
               broadcastToUser(resolvedCaller, 'call_accepted', {
+                callId,
+                recipient: resolvedRecipient,
+                demoVoicePrompt: `Hi there! I am ${recipientUser.displayName}. Great connecting with you at Okanagan College!`
+              });
+              broadcastToUser(resolvedCaller, 'voice_call_accepted', {
                 callId,
                 recipient: resolvedRecipient,
                 demoVoicePrompt: `Hi there! I am ${recipientUser.displayName}. Great connecting with you at Okanagan College!`
@@ -2222,6 +2233,11 @@ const server = http.createServer(async (req, res) => {
             recipient: call.recipient,
             offer: call.offer
           });
+          broadcastToUser(call.caller, 'voice_call_accepted', {
+            callId,
+            recipient: call.recipient,
+            offer: call.offer
+          });
 
           return res.end(JSON.stringify({
             success: true,
@@ -2234,6 +2250,7 @@ const server = http.createServer(async (req, res) => {
           DB.updateCall(callId, 'declined');
 
           broadcastToUser(call.caller, 'call_declined', { callId });
+          broadcastToUser(call.caller, 'voice_call_declined', { callId });
           activeCalls.delete(callId);
           return res.end(JSON.stringify({ success: true, status: 'declined' }));
         }
@@ -2246,6 +2263,7 @@ const server = http.createServer(async (req, res) => {
         if (call) {
           const other = call.caller === sender ? call.recipient : call.caller;
           broadcastToUser(other, 'call_ended', { callId, duration: duration || 0 });
+          broadcastToUser(other, 'voice_call_ended', { callId, duration: duration || 0 });
 
           // Record call in chat history
           const chatId = getDeterministicChatId(call.caller, call.recipient);
@@ -2291,6 +2309,12 @@ const server = http.createServer(async (req, res) => {
           type,
           data
         });
+        broadcastToUser(recipient, 'voice_call_signal', {
+          callId,
+          sender,
+          type,
+          data
+        });
 
         return res.end(JSON.stringify({ success: true }));
       }
@@ -2304,8 +2328,31 @@ const server = http.createServer(async (req, res) => {
             sender,
             chunk
           });
+          broadcastToUser(recipient, 'voice_call_audio_chunk', {
+            callId,
+            sender,
+            chunk
+          });
         }
         return res.end(JSON.stringify({ success: true }));
+      }
+
+      // Active Call Query Fallback Route
+      if (pathname === '/api/calls/active' && req.method === 'GET') {
+        const me = (parsedUrl.searchParams.get('me') || '').trim().toLowerCase();
+        const resolvedMe = resolveUsername(me);
+        if (!resolvedMe) {
+          return res.end(JSON.stringify({ success: true, call: null }));
+        }
+
+        let foundCall = null;
+        for (const [callId, call] of activeCalls.entries()) {
+          if (call.recipient === resolvedMe || call.caller === resolvedMe) {
+            foundCall = call;
+            break;
+          }
+        }
+        return res.end(JSON.stringify({ success: true, call: foundCall }));
       }
 
       // 17. Campus Safety SOS Alert

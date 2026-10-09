@@ -178,9 +178,19 @@
   border-top-color: rgba(84, 84, 88, 0.4);
 }
 
-[data-theme="dark"] .chat-input-pill {
+[data-theme="dark"] .chat-input-pill,
+[data-theme="dark"] .message-input-box {
   background: #1C1C1E;
-  border-color: rgba(255, 255, 255, 0.1);
+  border-color: rgba(255, 255, 255, 0.18);
+}
+
+[data-theme="dark"] .btn-ios-plus {
+  background-color: #2C2C2E;
+  color: #0A84FF;
+}
+
+[data-theme="dark"] .btn-ios-study {
+  background-color: #2C2C2E;
 }
 
 [data-theme="dark"] #message-text-input {
@@ -1412,7 +1422,7 @@ button, .btn-send-ios, .chat-item, .nav-btn, .avatar-circle, .list-item {
   backdrop-filter: saturate(180%) blur(20px);
   -webkit-backdrop-filter: saturate(180%) blur(20px);
   border-top: 0.5px solid var(--ios-separator);
-  padding: 8px 12px;
+  padding: 8px 12px max(10px, env(safe-area-inset-bottom, 10px));
   display: flex;
   align-items: center;
   gap: 8px;
