@@ -211,6 +211,22 @@ db.exec(`
     created_at INTEGER NOT NULL
   );
   CREATE INDEX IF NOT EXISTS idx_pending_notif_user ON pending_notifications(username, created_at);
+
+  CREATE TABLE IF NOT EXISTS chat_participants (
+    chat_id TEXT NOT NULL,
+    username TEXT NOT NULL,
+    last_active_timestamp INTEGER NOT NULL,
+    PRIMARY KEY (chat_id, username)
+  );
+  CREATE INDEX IF NOT EXISTS idx_chat_participants_user ON chat_participants(username, last_active_timestamp DESC);
+  CREATE INDEX IF NOT EXISTS idx_chat_participants_chat ON chat_participants(chat_id);
+
+  CREATE TABLE IF NOT EXISTS user_aliases (
+    alias TEXT PRIMARY KEY,
+    canonical_username TEXT NOT NULL,
+    created_at INTEGER NOT NULL
+  );
+  CREATE INDEX IF NOT EXISTS idx_user_aliases_canon ON user_aliases(canonical_username);
 `);
 
 // Safe column migrations for existing databases
@@ -500,7 +516,34 @@ const stmts = {
     VALUES (?, ?, ?, ?, ?)
   `),
   getPendingNotifications: db.prepare('SELECT * FROM pending_notifications WHERE username = ? ORDER BY created_at ASC'),
-  deletePendingNotificationsForUser: db.prepare('DELETE FROM pending_notifications WHERE username = ?')
+  deletePendingNotificationsForUser: db.prepare('DELETE FROM pending_notifications WHERE username = ?'),
+
+  // Chat Participants
+  upsertChatParticipant: db.prepare(`
+    INSERT INTO chat_participants (chat_id, username, last_active_timestamp)
+    VALUES (?, ?, ?)
+    ON CONFLICT(chat_id, username) DO UPDATE SET
+      last_active_timestamp = MAX(chat_participants.last_active_timestamp, excluded.last_active_timestamp)
+  `),
+  getChatParticipants: db.prepare('SELECT username, last_active_timestamp FROM chat_participants WHERE chat_id = ?'),
+  getDirectPartnersForUser: db.prepare(`
+    SELECT cp2.username AS partner, MAX(cp1.last_active_timestamp) AS last_active
+    FROM chat_participants cp1
+    JOIN chat_participants cp2 ON cp1.chat_id = cp2.chat_id AND cp2.username != cp1.username
+    WHERE cp1.username = ? AND cp1.chat_id NOT LIKE 'group_%'
+    GROUP BY cp2.username
+    ORDER BY last_active DESC
+  `),
+
+  // User Aliases
+  upsertUserAlias: db.prepare(`
+    INSERT INTO user_aliases (alias, canonical_username, created_at)
+    VALUES (?, ?, ?)
+    ON CONFLICT(alias) DO UPDATE SET
+      canonical_username = excluded.canonical_username
+  `),
+  getCanonicalUsername: db.prepare('SELECT canonical_username FROM user_aliases WHERE alias = ? LIMIT 1'),
+  getUserAliasesForCanonical: db.prepare('SELECT alias FROM user_aliases WHERE canonical_username = ?')
 };
 
 function formatUserRecord(row) {
@@ -600,13 +643,46 @@ const DB = {
     return formatUserRecord(row);
   },
 
+  setAlias(alias, canonicalUsername) {
+    if (!alias || !canonicalUsername) return;
+    const a = alias.trim().toLowerCase().replace(/^@/, '');
+    const c = canonicalUsername.trim().toLowerCase().replace(/^@/, '');
+    try {
+      stmts.upsertUserAlias.run(a, c, Date.now());
+    } catch (_) {}
+  },
+
+  getCanonicalUsername(identifier) {
+    if (!identifier) return null;
+    const clean = identifier.trim().toLowerCase().replace(/^@/, '');
+    try {
+      const row = stmts.getCanonicalUsername.get(clean);
+      if (row && row.canonical_username) return row.canonical_username;
+    } catch (_) {}
+    // Built-in known mappings fallback
+    if (clean === 'aadi_test' || clean === 'aadi') return '300363794';
+    if (clean === 'mukesh_sarwa' || clean === 'mukesh') return '300354198';
+    if (clean === 'lucas') return 'lucas_smi_oc';
+    if (clean === 'emily') return 'emily_mar';
+    return clean;
+  },
+
   findUser(identifier) {
     if (!identifier) return null;
     const clean = identifier.trim().toLowerCase().replace(/^@/, '');
+    
+    // 1. Resolve through canonical aliases first
+    const canonical = this.getCanonicalUsername(clean);
+    if (canonical && canonical !== clean) {
+      const u = this.getUser(canonical);
+      if (u) return u;
+    }
+
+    // 2. Direct attribute checks
     const direct = this.getUser(clean) || this.getUserByOcId(clean) || this.getUserByEmail(clean) || this.getUserByPhone(clean);
     if (direct) return direct;
 
-    // Check known student IDs and handle aliases
+    // 3. Fallback to built-in known student IDs and handle aliases
     if (clean === 'aadi_test' || clean === 'aadi') return this.getUser('300363794');
     if (clean === 'mukesh_sarwa' || clean === 'mukesh') return this.getUser('300354198') || this.getUser('mukesh');
     if (clean === 'lucas') return this.getUser('lucas_smi_oc');
@@ -926,12 +1002,15 @@ const DB = {
         }
       }
 
-      // 9. Migrate pending notifications, pinned chats, starred messages, calls
+      // 9. Migrate pending notifications, pinned chats, starred messages, calls, chat_participants, user_aliases
       try { db.prepare('UPDATE pending_notifications SET username = ? WHERE username = ?').run(newClean, oldClean); } catch(_) {}
       try { db.prepare('UPDATE pinned_chats SET username = ? WHERE username = ?').run(newClean, oldClean); } catch(_) {}
       try { db.prepare('UPDATE starred_messages SET username = ? WHERE username = ?').run(newClean, oldClean); } catch(_) {}
       try { db.prepare('UPDATE calls SET caller = ? WHERE caller = ?').run(newClean, oldClean); } catch(_) {}
       try { db.prepare('UPDATE calls SET callee = ? WHERE callee = ?').run(newClean, oldClean); } catch(_) {}
+      try { db.prepare('UPDATE chat_participants SET username = ? WHERE username = ?').run(newClean, oldClean); } catch(_) {}
+      try { this.setAlias(oldClean, newClean); } catch(_) {}
+      try { this.setAlias(newClean, newClean); } catch(_) {}
 
       db.exec('COMMIT;');
       return this.getUser(newClean);
@@ -944,26 +1023,40 @@ const DB = {
   getUserAliases(username) {
     if (!username) return [];
     const clean = username.trim().toLowerCase().replace(/^@/, '');
-    const aliases = [clean];
-    const user = this.findUser(clean);
+    const canonical = this.getCanonicalUsername(clean) || clean;
+    const aliasesSet = new Set([clean, canonical]);
+
+    // Query from user_aliases table
+    try {
+      const rows = stmts.getUserAliasesForCanonical.all(canonical);
+      for (const r of rows) {
+        if (r.alias) aliasesSet.add(r.alias.toLowerCase());
+      }
+    } catch (_) {}
+
+    // Check user table for oc_id and email
+    const user = this.findUser(canonical);
     if (user) {
-      if (user.username && !aliases.includes(user.username.toLowerCase())) aliases.push(user.username.toLowerCase());
-      if (user.ocId && !aliases.includes(user.ocId.toLowerCase())) aliases.push(user.ocId.toLowerCase());
+      if (user.username) aliasesSet.add(user.username.toLowerCase());
+      if (user.ocId) aliasesSet.add(user.ocId.toLowerCase());
+      if (user.email) aliasesSet.add(user.email.toLowerCase());
     }
+
     // Hardcoded known student ID / handle aliases
-    if (clean === '300354198' || clean === 'mukesh' || clean === 'mukesh_sarwa') {
-      ['300354198', 'mukesh', 'mukesh_sarwa'].forEach(a => { if (!aliases.includes(a)) aliases.push(a); });
+    if (canonical === '300354198' || aliasesSet.has('300354198') || aliasesSet.has('mukesh') || aliasesSet.has('mukesh_sarwa')) {
+      ['300354198', 'mukesh', 'mukesh_sarwa'].forEach(a => aliasesSet.add(a));
     }
-    if (clean === '300363794' || clean === 'aadi_test' || clean === 'aadi') {
-      ['300363794', 'aadi_test', 'aadi'].forEach(a => { if (!aliases.includes(a)) aliases.push(a); });
+    if (canonical === '300363794' || aliasesSet.has('300363794') || aliasesSet.has('aadi_test') || aliasesSet.has('aadi')) {
+      ['300363794', 'aadi_test', 'aadi'].forEach(a => aliasesSet.add(a));
     }
-    if (clean === 'lucas_smi_oc' || clean === 'lucas') {
-      ['lucas_smi_oc', 'lucas'].forEach(a => { if (!aliases.includes(a)) aliases.push(a); });
+    if (canonical === 'lucas_smi_oc' || aliasesSet.has('lucas_smi_oc') || aliasesSet.has('lucas')) {
+      ['lucas_smi_oc', 'lucas'].forEach(a => aliasesSet.add(a));
     }
-    if (clean === 'emily_mar' || clean === 'emily') {
-      ['emily_mar', 'emily'].forEach(a => { if (!aliases.includes(a)) aliases.push(a); });
+    if (canonical === 'emily_mar' || aliasesSet.has('emily_mar') || aliasesSet.has('emily')) {
+      ['emily_mar', 'emily'].forEach(a => aliasesSet.add(a));
     }
-    return aliases;
+
+    return Array.from(aliasesSet);
   },
 
   getFriends(username) {
@@ -979,27 +1072,51 @@ const DB = {
     aliases.sort((a, b) => b.length - a.length);
 
     const partners = new Set();
-    const rows = db.prepare("SELECT DISTINCT chat_id FROM messages WHERE chat_id IS NOT NULL AND chat_id NOT LIKE 'group_%'").all();
-    
-    for (const r of rows) {
-      if (!r.chat_id) continue;
-      for (const a of aliases) {
-        let other = null;
-        if (r.chat_id.startsWith(a + '_')) {
-          other = r.chat_id.slice((a + '_').length);
-        } else if (r.chat_id.endsWith('_' + a)) {
-          other = r.chat_id.slice(0, -(('_' + a).length));
-        }
-        if (other && !aliases.includes(other)) {
-          const resolvedUser = this.findUser(other);
-          const finalPartner = resolvedUser ? resolvedUser.username : other;
-          if (finalPartner && !aliases.includes(finalPartner)) {
-            partners.add(finalPartner);
+
+    // 1. Primary: Query chat_participants table (relational, zero string splitting)
+    for (const a of aliases) {
+      try {
+        const rows = stmts.getDirectPartnersForUser.all(a);
+        for (const r of rows) {
+          if (r.partner) {
+            const resolved = this.findUser(r.partner);
+            const canonicalPartner = resolved ? resolved.username : r.partner;
+            if (canonicalPartner && !aliases.includes(canonicalPartner)) {
+              partners.add(canonicalPartner);
+            }
           }
-          break;
+        }
+      } catch (_) {}
+    }
+
+    // 2. Fallback: Prefix/suffix scan on raw messages if participants table empty
+    if (partners.size === 0) {
+      const rows = db.prepare("SELECT DISTINCT chat_id FROM messages WHERE chat_id IS NOT NULL AND chat_id NOT LIKE 'group_%'").all();
+      for (const r of rows) {
+        if (!r.chat_id) continue;
+        for (const a of aliases) {
+          let other = null;
+          if (r.chat_id.startsWith(a + '_')) {
+            other = r.chat_id.slice((a + '_').length);
+          } else if (r.chat_id.endsWith('_' + a)) {
+            other = r.chat_id.slice(0, -(('_' + a).length));
+          }
+          if (other && !aliases.includes(other)) {
+            const resolvedUser = this.findUser(other);
+            const finalPartner = resolvedUser ? resolvedUser.username : other;
+            if (finalPartner && !aliases.includes(finalPartner)) {
+              partners.add(finalPartner);
+              try {
+                stmts.upsertChatParticipant.run(r.chat_id, a, Date.now());
+                stmts.upsertChatParticipant.run(r.chat_id, finalPartner, Date.now());
+              } catch (_) {}
+            }
+            break;
+          }
         }
       }
     }
+
     return Array.from(partners);
   },
 
@@ -1162,15 +1279,17 @@ const DB = {
 
   saveMessage(msg) {
     const id = msg.id || 'msg_' + Date.now() + '_' + Math.random().toString(36).slice(2, 7);
-    const chatId = msg.chatId || (msg.recipient ? getDeterministicChatId(msg.sender, msg.recipient) : null);
+    const sender = (msg.sender || '').toLowerCase().trim().replace(/^@/, '');
+    const chatId = msg.chatId || (msg.recipient ? getDeterministicChatId(sender, msg.recipient) : null);
     const channel = msg.channel ? msg.channel.toLowerCase() : null;
     const replyToJson = msg.replyTo ? JSON.stringify(msg.replyTo) : null;
+    const timestamp = msg.timestamp || Date.now();
     
     stmts.insertMessage.run(
       id,
       chatId,
       channel,
-      msg.sender.toLowerCase(),
+      sender,
       msg.displayName || msg.sender,
       msg.text || '',
       msg.image || null,
@@ -1180,8 +1299,26 @@ const DB = {
       msg.call ? JSON.stringify(msg.call) : null,
       replyToJson,
       msg.status || 'sent',
-      msg.timestamp || Date.now()
+      timestamp
     );
+
+    // Register participants in chat_participants
+    if (chatId) {
+      try {
+        stmts.upsertChatParticipant.run(chatId, sender, timestamp);
+        if (msg.recipient) {
+          const rec = msg.recipient.toLowerCase().trim().replace(/^@/, '');
+          stmts.upsertChatParticipant.run(chatId, rec, timestamp);
+        } else if (!chatId.startsWith('group_')) {
+          // If 1-on-1 chat, identify both participants
+          const parts = chatId.split('_');
+          if (parts.length === 2) {
+            stmts.upsertChatParticipant.run(chatId, parts[0], timestamp);
+            stmts.upsertChatParticipant.run(chatId, parts[1], timestamp);
+          }
+        }
+      } catch (_) {}
+    }
 
     return formatMessageRecord(stmts.getMessageById.get(id));
   },
@@ -1919,10 +2056,75 @@ function migrateLegacyChatIds() {
   } catch (_) {}
 }
 
-// Run Migration & Seeding
+// Relational Backfill for Chat Participants and User Aliases
+function backfillChatParticipantsAndAliases() {
+  try {
+    // 1. Seed known student ID and alias pairs into user_aliases
+    const knownMappings = [
+      ['300354198', '300354198'],
+      ['mukesh', '300354198'],
+      ['mukesh_sarwa', '300354198'],
+      ['300363794', '300363794'],
+      ['aadi_test', '300363794'],
+      ['aadi', '300363794'],
+      ['lucas', 'lucas_smi_oc'],
+      ['emily', 'emily_mar']
+    ];
+    for (const [alias, canonical] of knownMappings) {
+      DB.setAlias(alias, canonical);
+    }
+
+    // 2. Map all registered users to themselves and their oc_id / email
+    const allUsers = db.prepare('SELECT username, oc_id, email FROM users').all();
+    for (const u of allUsers) {
+      if (u.username) {
+        DB.setAlias(u.username, u.username);
+        if (u.oc_id) DB.setAlias(u.oc_id, u.username);
+        if (u.email) DB.setAlias(u.email, u.username);
+      }
+    }
+
+    // 3. Backfill chat_participants from all existing messages
+    const distinctChats = db.prepare("SELECT chat_id, sender, MAX(timestamp) as last_ts FROM messages WHERE chat_id IS NOT NULL AND chat_id != '' GROUP BY chat_id, sender").all();
+    for (const row of distinctChats) {
+      if (row.chat_id && row.sender) {
+        try {
+          stmts.upsertChatParticipant.run(row.chat_id, row.sender.toLowerCase(), row.last_ts || Date.now());
+        } catch (_) {}
+      }
+    }
+
+    // 4. In direct chats, ensure both conversational partners are registered in chat_participants
+    const allDirectChats = db.prepare("SELECT DISTINCT chat_id FROM messages WHERE chat_id IS NOT NULL AND chat_id NOT LIKE 'group_%'").all();
+    const knownUsernames = allUsers.map(u => u.username.toLowerCase());
+    for (const c of allDirectChats) {
+      if (!c.chat_id) continue;
+      for (const u of knownUsernames) {
+        let other = null;
+        if (c.chat_id.startsWith(u + '_')) {
+          other = c.chat_id.slice((u + '_').length);
+        } else if (c.chat_id.endsWith('_' + u)) {
+          other = c.chat_id.slice(0, -(('_' + u).length));
+        }
+        if (other) {
+          const canonicalOther = DB.getCanonicalUsername(other);
+          try {
+            stmts.upsertChatParticipant.run(c.chat_id, u, Date.now());
+            stmts.upsertChatParticipant.run(c.chat_id, canonicalOther || other, Date.now());
+          } catch (_) {}
+        }
+      }
+    }
+  } catch (err) {
+    console.error('Warning in backfillChatParticipantsAndAliases:', err.message);
+  }
+}
+
+// Run Migration, Seeding & Relational Participant Backfill
 migrateFromLegacyJson();
 seedDemoStudents();
 migrateLegacyChatIds();
+backfillChatParticipantsAndAliases();
 
 module.exports = {
   DB,

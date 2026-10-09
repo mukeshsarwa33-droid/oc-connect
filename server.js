@@ -83,6 +83,11 @@ function checkOtpRateLimit(key, maxLimit = 6, windowMs = 10 * 60 * 1000) {
 function resolveUsername(identifier) {
   if (!identifier) return null;
   const clean = identifier.trim().toLowerCase().replace(/^@/, '');
+  const canonical = DB.getCanonicalUsername ? DB.getCanonicalUsername(clean) : clean;
+  if (canonical) {
+    const u = DB.getUser(canonical);
+    if (u) return u.username;
+  }
   const user = DB.findUser(clean);
   return user ? user.username : clean;
 }
@@ -99,7 +104,8 @@ function getSessionFromRequest(req, parsedUrl) {
   if (!token) return null;
   const session = DB.getSession(token);
   if (!session) return null;
-  const user = DB.getUser(session.username);
+  const canonical = DB.getCanonicalUsername ? (DB.getCanonicalUsername(session.username) || session.username) : session.username;
+  const user = DB.getUser(canonical) || DB.findUser(session.username);
   if (!user) return null;
   return { session, user };
 }
@@ -769,10 +775,12 @@ const server = http.createServer(async (req, res) => {
         if (resolvedOld !== newClean) {
           const taken = DB.getUser(newClean);
           const isOwnLegacyAccount = taken && (
+            (DB.getCanonicalUsername && DB.getCanonicalUsername(newClean) === DB.getCanonicalUsername(resolvedOld)) ||
+            (DB.getUserAliases && DB.getUserAliases(resolvedOld).includes(newClean)) ||
             (existingUser.email && taken.email && existingUser.email === taken.email) ||
             (existingUser.ocId && taken.ocId && (existingUser.ocId === taken.ocId || existingUser.ocId.includes(taken.ocId) || taken.ocId.includes(existingUser.ocId))) ||
-            (resolvedOld === '300354198' && newClean === 'mukesh') ||
-            (resolvedOld === 'mukesh' && newClean === '300354198')
+            (resolvedOld === '300354198' && (newClean === 'mukesh' || newClean === 'mukesh_sarwa')) ||
+            ((resolvedOld === 'mukesh' || resolvedOld === 'mukesh_sarwa') && newClean === '300354198')
           );
           if (taken && !isOwnLegacyAccount && !taken.isDemo) {
             res.writeHead(409, { 'Content-Type': 'application/json' });
@@ -3288,10 +3296,12 @@ const server = http.createServer(async (req, res) => {
           }
           const taken = DB.getUser(requestedNewUsername);
           const isOwnLegacyAccount = taken && (
+            (DB.getCanonicalUsername && DB.getCanonicalUsername(requestedNewUsername) === DB.getCanonicalUsername(resolved)) ||
+            (DB.getUserAliases && DB.getUserAliases(resolved).includes(requestedNewUsername)) ||
             (user.email && taken.email && user.email === taken.email) ||
             (user.ocId && taken.ocId && (user.ocId === taken.ocId || user.ocId.includes(taken.ocId) || taken.ocId.includes(user.ocId))) ||
-            (resolved === '300354198' && requestedNewUsername === 'mukesh') ||
-            (resolved === 'mukesh' && requestedNewUsername === '300354198')
+            (resolved === '300354198' && (requestedNewUsername === 'mukesh' || requestedNewUsername === 'mukesh_sarwa')) ||
+            ((resolved === 'mukesh' || resolved === 'mukesh_sarwa') && requestedNewUsername === '300354198')
           );
           if (taken && !isOwnLegacyAccount && !taken.isDemo) {
             res.writeHead(409, { 'Content-Type': 'application/json' });
