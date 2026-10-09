@@ -113,18 +113,35 @@ function getAvatarColor(username) {
   return AVATAR_COLORS[Math.abs(hash) % AVATAR_COLORS.length];
 }
 
-// Real-Time SSE Broadcasting Engine
+// Safe Non-Blocking SSE Stream Writer with Backpressure & Stale Socket Protection
+function safeWriteSSE(res, payload) {
+  if (!res || res.writableEnded || res.destroyed) return false;
+  try {
+    const ok = res.write(payload);
+    if (typeof res.flush === 'function') res.flush();
+    if (!ok && !res._hasDrainListener) {
+      // Buffer is full (slow network / client lag); attach drain listener to resume smoothly
+      res._hasDrainListener = true;
+      res.once('drain', () => {
+        res._hasDrainListener = false;
+      });
+    }
+    return true;
+  } catch (_) {
+    return false;
+  }
+}
+
+// Real-Time SSE Broadcasting Engine (Backpressure-Safe)
 function broadcastToUser(username, eventName, data) {
   if (!username) return;
   const clean = username.trim().toLowerCase().replace(/^@/, '');
   const userStreams = sseConnections.get(clean);
   if (userStreams && userStreams.size > 0) {
     const payload = `event: ${eventName}\ndata: ${JSON.stringify(data)}\n\n`;
-    for (const res of userStreams) {
-      try {
-        res.write(payload);
-        if (typeof res.flush === 'function') res.flush();
-      } catch (_) {
+    for (const res of [...userStreams]) {
+      const sent = safeWriteSSE(res, payload);
+      if (!sent) {
         userStreams.delete(res);
       }
     }
@@ -134,11 +151,9 @@ function broadcastToUser(username, eventName, data) {
 function broadcastToAll(eventName, data) {
   const payload = `event: ${eventName}\ndata: ${JSON.stringify(data)}\n\n`;
   for (const [username, userStreams] of sseConnections.entries()) {
-    for (const res of userStreams) {
-      try {
-        res.write(payload);
-        if (typeof res.flush === 'function') res.flush();
-      } catch (_) {
+    for (const res of [...userStreams]) {
+      const sent = safeWriteSSE(res, payload);
+      if (!sent) {
         userStreams.delete(res);
       }
     }
@@ -149,10 +164,23 @@ function broadcastToGroup(groupId, eventName, data, excludeUser = null) {
   if (!groupId) return;
   const members = DB.getGroupMembers(groupId);
   const excludeClean = excludeUser ? excludeUser.trim().toLowerCase().replace(/^@/, '') : null;
-  for (const m of members) {
-    if (excludeClean && m.username === excludeClean) continue;
-    broadcastToUser(m.username, eventName, data);
-  }
+  const payload = `event: ${eventName}\ndata: ${JSON.stringify(data)}\n\n`;
+  
+  // Use setImmediate to avoid blocking the event loop when fan-out is large
+  setImmediate(() => {
+    for (const m of members) {
+      if (excludeClean && m.username === excludeClean) continue;
+      const userStreams = sseConnections.get(m.username);
+      if (userStreams && userStreams.size > 0) {
+        for (const res of [...userStreams]) {
+          const sent = safeWriteSSE(res, payload);
+          if (!sent) {
+            userStreams.delete(res);
+          }
+        }
+      }
+    }
+  });
 }
 
 // Request body parser using Buffer chunks (supports 50MB uploads)
@@ -3116,12 +3144,13 @@ const server = http.createServer(async (req, res) => {
           });
         }
 
-        // Heartbeat Keepalive every 20 seconds
+        // Heartbeat Keepalive every 20 seconds (resilient to severed sockets)
         const keepaliveTimer = setInterval(() => {
-          try {
-            res.write(': keepalive\n\n');
-          } catch (_) {
+          const ok = safeWriteSSE(res, ': keepalive\n\n');
+          if (!ok) {
             clearInterval(keepaliveTimer);
+            const userStreams = sseConnections.get(resolved);
+            if (userStreams) userStreams.delete(res);
           }
         }, 20000);
 
