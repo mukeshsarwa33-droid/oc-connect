@@ -55,24 +55,28 @@ const PORT = process.env.PORT || 8080;
 const sseConnections = new Map(); // username -> Set of SSE response streams
 const activeCalls = new Map();     // callId -> call session metadata & candidate queues
 
-// Anti-Spam Rate Limiter for OTP Requests (Security Hardened)
-const otpRateLimits = new Map(); // key -> { count, resetAt }
-function checkOtpRateLimit(key, maxLimit = 6, windowMs = 10 * 60 * 1000) {
+// Anti-Spam Rate Limiter for In-Memory Tracking (Security Hardened)
+const actionRateLimits = new Map(); // key -> { count, resetAt }
+function checkActionRateLimit(prefix, key, maxLimit, windowMs) {
   const now = Date.now();
-  const cleanKey = String(key || '').trim().toLowerCase();
-  const entry = otpRateLimits.get(cleanKey) || { count: 0, resetAt: now + windowMs };
+  const fullKey = `${prefix}:${String(key || '').trim().toLowerCase()}`;
+  const entry = actionRateLimits.get(fullKey) || { count: 0, resetAt: now + windowMs };
   if (now > entry.resetAt) {
     entry.count = 1;
     entry.resetAt = now + windowMs;
-    otpRateLimits.set(cleanKey, entry);
+    actionRateLimits.set(fullKey, entry);
     return true;
   }
   if (entry.count >= maxLimit) {
     return false;
   }
   entry.count++;
-  otpRateLimits.set(cleanKey, entry);
+  actionRateLimits.set(fullKey, entry);
   return true;
+}
+
+function checkOtpRateLimit(key, maxLimit = 6, windowMs = 10 * 60 * 1000) {
+  return checkActionRateLimit('otp', key, maxLimit, windowMs);
 }
 
 // Resolve username helper (matches exact username, OC ID, email, or phone)
@@ -378,8 +382,8 @@ const server = http.createServer(async (req, res) => {
           return res.end(JSON.stringify({ error: 'Too many incorrect attempts. For security, this code was invalidated. Please request a new code.' }));
         }
 
-        // Verify code (exact match or demo/test code)
-        const isCodeValid = (cleanCode === otp.code || cleanCode === '123456' || cleanCode === '000000');
+        // Verify code (strict match against generated OTP)
+        const isCodeValid = (cleanCode === otp.code);
         if (!isCodeValid) {
           DB.incrementOtpAttempts(cleanIdentifier);
           const remaining = 5 - (otp.attempts + 1);
@@ -843,6 +847,12 @@ const server = http.createServer(async (req, res) => {
           return res.end(JSON.stringify({ success: true, message: 'Already friends' }));
         }
 
+        // Rate limit: max 10 friend requests per user per hour
+        if (!checkActionRateLimit('friends_req', resolvedFrom, 10, 60 * 60 * 1000)) {
+          res.writeHead(429);
+          return res.end(JSON.stringify({ error: 'Too many friend requests sent. Please wait before sending more.' }));
+        }
+
         const senderUser = DB.getUser(resolvedFrom);
         if (!senderUser) {
           res.writeHead(404);
@@ -1205,6 +1215,12 @@ const server = http.createServer(async (req, res) => {
         if (!resolvedSender) {
           res.writeHead(400);
           return res.end(JSON.stringify({ error: 'Unauthorized sender' }));
+        }
+
+        // Rate limit: max 30 messages per user per minute
+        if (!checkActionRateLimit('msg', resolvedSender, 30, 60 * 1000)) {
+          res.writeHead(429);
+          return res.end(JSON.stringify({ error: 'Rate limit exceeded: max 30 messages per minute.' }));
         }
 
         if (!cleanText && !image && !file && !voice && !studyCard) {
@@ -2313,6 +2329,12 @@ const server = http.createServer(async (req, res) => {
         if (!resolvedCaller || !resolvedRecipient) {
           res.writeHead(404);
           return res.end(JSON.stringify({ error: 'Student account not found' }));
+        }
+
+        // Rate limit: max 5 calls per user per minute
+        if (!checkActionRateLimit('call', resolvedCaller, 5, 60 * 1000)) {
+          res.writeHead(429);
+          return res.end(JSON.stringify({ error: 'Rate limit exceeded: max 5 calls per minute.' }));
         }
 
         if (DB.isBlocked(resolvedCaller, resolvedRecipient)) {
