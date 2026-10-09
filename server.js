@@ -1759,7 +1759,7 @@ const server = http.createServer(async (req, res) => {
         }
 
         const initialMembers = Array.isArray(members) ? members : [];
-        const creatorUser = DB.getUser(resolvedCreator);
+        const creatorUser = DB.getUser(resolvedCreator) || DB.findUser(resolvedCreator) || { displayName: resolvedCreator };
 
         // Process group avatar image (Option A: <= 500KB stored directly in SQLite)
         let processedAvatarImage = avatarImage || null;
@@ -1896,7 +1896,7 @@ const server = http.createServer(async (req, res) => {
           return res.end(JSON.stringify({ error: 'You must be a member to add classmates.' }));
         }
 
-        const adderUser = DB.getUser(resolvedUser);
+        const adderUser = DB.getUser(resolvedUser) || DB.findUser(resolvedUser) || { displayName: resolvedUser };
         const listToAdd = Array.isArray(newMembers) ? newMembers : [newMembers];
         const addedDisplayNames = [];
 
@@ -1961,8 +1961,8 @@ const server = http.createServer(async (req, res) => {
           return res.end(JSON.stringify({ error: 'Only group admins can remove other participants.' }));
         }
 
-        const actorUser = DB.getUser(resolvedUser);
-        const targetObj = DB.getUser(resolvedTarget);
+        const actorUser = DB.getUser(resolvedUser) || DB.findUser(resolvedUser) || { displayName: resolvedUser };
+        const targetObj = DB.getUser(resolvedTarget) || DB.findUser(resolvedTarget) || { displayName: resolvedTarget };
 
         DB.removeGroupMember(cleanGroupId, resolvedTarget);
 
@@ -2025,7 +2025,7 @@ const server = http.createServer(async (req, res) => {
           avatarImage: processedAvatarImage
         });
 
-        const actorUser = DB.getUser(resolvedUser);
+        const actorUser = DB.getUser(resolvedUser) || DB.findUser(resolvedUser) || { displayName: resolvedUser };
         const sysMsg = DB.saveMessage({
           id: 'msg_sys_' + Date.now(),
           chatId: 'group_' + cleanGroupId,
@@ -2493,7 +2493,7 @@ const server = http.createServer(async (req, res) => {
       }
 
       // 15. Verified Trusted User Toggle (Blue Tick)
-      if (pathname === '/api/friends/trust/toggle' && req.method === 'POST') {
+      if ((pathname === '/api/friends/trust/toggle' || pathname === '/api/users/trust') && req.method === 'POST') {
         const { me, target } = await parseJsonBody(req);
         const resolvedMe = resolveUsername(me);
         const resolvedTarget = resolveUsername(target);
@@ -2756,8 +2756,8 @@ const server = http.createServer(async (req, res) => {
       }
 
       // 17. Campus Safety SOS Alert
-      if (pathname === '/api/sos/trigger' && req.method === 'POST') {
-        const { sender, type } = await parseJsonBody(req);
+      if ((pathname === '/api/sos/trigger' || pathname === '/api/sos/alert') && req.method === 'POST') {
+        const { sender, type, locationName } = await parseJsonBody(req);
         const resolvedSender = resolveUsername(sender);
 
         if (!resolvedSender) {
@@ -2765,12 +2765,13 @@ const server = http.createServer(async (req, res) => {
           return res.end(JSON.stringify({ error: 'Unauthorized sender' }));
         }
 
-        const user = DB.getUser(resolvedSender);
+        const user = DB.getUser(resolvedSender) || DB.findUser(resolvedSender) || { displayName: resolvedSender };
         const alertObj = {
           id: 'sos_' + Date.now(),
           username: resolvedSender,
-          displayName: user.displayName,
+          displayName: user.displayName || resolvedSender,
           type: type || 'walk_me_home',
+          location: locationName || 'Okanagan College KLO Campus',
           timestamp: Date.now()
         };
 
@@ -2780,7 +2781,7 @@ const server = http.createServer(async (req, res) => {
           channel: 'campus-safety',
           sender: 'SecurityBot',
           displayName: 'Campus Security 🛡️',
-          text: `🚨 SAFETY ALERT: ${user.displayName} (@${resolvedSender}) activated [${type === 'walk_me_home' ? 'Walk Me Home' : 'Emergency SOS'}] on Kelowna Campus. Security and campus monitors notified.`,
+          text: `🚨 SAFETY ALERT: ${user.displayName || resolvedSender} (@${resolvedSender}) activated [${type === 'walk_me_home' ? 'Walk Me Home' : 'Emergency SOS'}] on Kelowna Campus. Security and campus monitors notified.`,
           timestamp: Date.now(),
           status: 'read'
         });
@@ -3420,12 +3421,12 @@ const server = http.createServer(async (req, res) => {
 
         // Notify friends user is online
         const myFriends = DB.getFriends(resolved);
-        const meUser = DB.getUser(resolved);
+        const meUser = DB.getUser(resolved) || DB.findUser(resolved) || {};
         for (const f of myFriends) {
           broadcastToUser(f, 'user_online', {
             username: resolved,
             online: true,
-            avatarImage: meUser.avatarImage
+            avatarImage: meUser ? meUser.avatarImage : null
           });
         }
 
