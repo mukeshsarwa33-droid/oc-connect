@@ -692,17 +692,7 @@ const server = http.createServer(async (req, res) => {
         const resolvedMe = resolveUsername(currentUsername);
         const filterQuery = (parsedUrl.searchParams.get('query') || '').trim().toLowerCase();
 
-        // Student Privacy: Require search query
-        if (!filterQuery) {
-          const { total, online } = DB.countUsers();
-          return res.end(JSON.stringify({
-            students: [],
-            total: total,
-            onlineCount: online,
-            privacyNotice: "🔒 Student Privacy Protected: Enter a classmate's exact @username to find and connect."
-          }));
-        }
-
+        // High performance classmate directory lookup
         const matches = DB.searchStudents(resolvedMe, filterQuery, 60);
         const myFriends = resolvedMe ? DB.getFriends(resolvedMe) : [];
         const myOutgoing = resolvedMe ? DB.getOutgoingRequests(resolvedMe).map(o => o.to) : [];
@@ -743,6 +733,7 @@ const server = http.createServer(async (req, res) => {
 
         return res.end(JSON.stringify({
           requests: incoming,
+          incoming: incoming,
           outgoing: outgoing
         }));
       }
@@ -768,6 +759,11 @@ const server = http.createServer(async (req, res) => {
         }
 
         const senderUser = DB.getUser(resolvedFrom);
+        if (!senderUser) {
+          res.writeHead(404);
+          return res.end(JSON.stringify({ error: 'Sender profile not found' }));
+        }
+
         const reqId = 'req_' + Date.now() + '_' + Math.random().toString(36).substr(2, 4);
 
         DB.addFriendRequest(
@@ -788,7 +784,9 @@ const server = http.createServer(async (req, res) => {
           timestamp: Date.now()
         };
 
+        // Dual broadcast for client event listener compatibility
         broadcastToUser(resolvedTo, 'friend_request', newReq);
+        broadcastToUser(resolvedTo, 'friend_request_received', newReq);
 
         // Simulated auto-accept for demo students
         const targetUser = DB.getUser(resolvedTo);
@@ -797,14 +795,17 @@ const server = http.createServer(async (req, res) => {
             DB.removeFriendRequest(reqId);
             DB.addFriend(resolvedFrom, resolvedTo);
 
-            broadcastToUser(resolvedFrom, 'friend_accepted', {
+            const acceptPayload = {
               friend: {
                 username: targetUser.username,
                 displayName: targetUser.displayName,
                 avatarColor: targetUser.avatarColor,
                 online: targetUser.online
               }
-            });
+            };
+            broadcastToUser(resolvedFrom, 'friend_accepted', acceptPayload);
+            broadcastToUser(resolvedFrom, 'friend_request_accepted', acceptPayload);
+            broadcastToUser(resolvedFrom, 'friend_added', acceptPayload);
 
             const welcomeTexts = [
               "Hey there! Great to connect with you on OC Connect.",
@@ -831,9 +832,20 @@ const server = http.createServer(async (req, res) => {
         return res.end(JSON.stringify({ success: true, request: newReq }));
       }
 
+      // 7b. Friends: Cancel Outgoing Request
+      if (pathname === '/api/friends/request/cancel' && req.method === 'POST') {
+        const { me, to } = await parseJsonBody(req);
+        const resolvedMe = resolveUsername(me);
+        const resolvedTo = resolveUsername(to);
+        if (resolvedMe && resolvedTo) {
+          DB.removeFriendRequestPair(resolvedMe, resolvedTo);
+        }
+        return res.end(JSON.stringify({ success: true }));
+      }
+
       // 8. Friends: Accept or Decline Request
       if (pathname === '/api/friends/request/respond' && req.method === 'POST') {
-        const { requestId, action, me } = await parseJsonBody(req);
+        const { requestId, id, action, me, from } = await parseJsonBody(req);
         const resolvedMe = resolveUsername(me);
 
         if (!resolvedMe) {
@@ -842,28 +854,55 @@ const server = http.createServer(async (req, res) => {
         }
 
         const requests = DB.getFriendRequests(resolvedMe);
-        const reqObj = requests.find(r => r.id === requestId);
+        const targetReqId = requestId || id;
+        const targetFrom = from ? resolveUsername(from) : null;
+
+        // Match request by unique requestId or by requester handle
+        let reqObj = requests.find(r => (targetReqId && r.id === targetReqId) || (targetFrom && r.from.toLowerCase() === targetFrom.toLowerCase()));
 
         if (!reqObj) {
+          // If already friends, return accepted status
+          if (targetFrom && DB.isFriend(resolvedMe, targetFrom)) {
+            const friendUser = DB.getUser(targetFrom);
+            return res.end(JSON.stringify({
+              success: true,
+              status: 'accepted',
+              friend: {
+                username: friendUser.username,
+                displayName: friendUser.displayName,
+                avatarColor: friendUser.avatarColor,
+                online: friendUser.online
+              }
+            }));
+          }
           res.writeHead(404);
           return res.end(JSON.stringify({ error: 'Friend request expired or not found' }));
         }
 
         const resolvedFrom = reqObj.from;
-        DB.removeFriendRequest(requestId);
+        if (reqObj.id) {
+          DB.removeFriendRequest(reqObj.id);
+        } else {
+          DB.removeFriendRequestPair(resolvedFrom, resolvedMe);
+        }
 
         if (action === 'accept') {
           DB.addFriend(resolvedMe, resolvedFrom);
           const friendUser = DB.getUser(resolvedFrom);
+          const meUser = DB.getUser(resolvedMe);
 
-          broadcastToUser(resolvedFrom, 'friend_accepted', {
+          const acceptPayload = {
             friend: {
               username: resolvedMe,
-              displayName: DB.getUser(resolvedMe).displayName,
-              avatarColor: DB.getUser(resolvedMe).avatarColor,
+              displayName: meUser ? meUser.displayName : resolvedMe,
+              avatarColor: meUser ? meUser.avatarColor : '#007AFF',
               online: true
             }
-          });
+          };
+
+          broadcastToUser(resolvedFrom, 'friend_accepted', acceptPayload);
+          broadcastToUser(resolvedFrom, 'friend_request_accepted', acceptPayload);
+          broadcastToUser(resolvedFrom, 'friend_added', acceptPayload);
 
           return res.end(JSON.stringify({
             success: true,
@@ -878,6 +917,47 @@ const server = http.createServer(async (req, res) => {
         } else {
           return res.end(JSON.stringify({ success: true, status: 'declined' }));
         }
+      }
+
+      // 8b. Server-Side Backup & Chat History Export
+      if (pathname === '/api/backup/export' && req.method === 'GET') {
+        const username = (parsedUrl.searchParams.get('me') || '').trim().toLowerCase();
+        const resolved = resolveUsername(username);
+        if (!resolved) {
+          res.writeHead(400);
+          return res.end(JSON.stringify({ error: 'Invalid user' }));
+        }
+
+        const userObj = DB.getUser(resolved);
+        const friends = DB.getFriends(resolved);
+        const userChats = {};
+        let totalCount = 0;
+
+        for (const f of friends) {
+          const chatId = getDeterministicChatId(resolved, f);
+          const history = DB.getChatHistory(chatId, 1000);
+          userChats[chatId] = history;
+          totalCount += history.length;
+        }
+
+        const backupData = {
+          version: 1,
+          app: 'OC Connect',
+          exportedAt: Date.now(),
+          exportedDate: new Date().toISOString(),
+          user: {
+            username: userObj.username,
+            ocId: userObj.ocId,
+            displayName: userObj.displayName
+          },
+          friends: friends,
+          chats: userChats,
+          totalMessages: totalCount
+        };
+
+        res.setHeader('Content-Type', 'application/json');
+        res.setHeader('Content-Disposition', `attachment; filename="oc_connect_backup_${resolved}_${Date.now()}.json"`);
+        return res.end(JSON.stringify(backupData, null, 2));
       }
 
       // 9. Friends: List

@@ -237,6 +237,43 @@ const LocalDeviceStore = {
     } catch (_) {}
   },
 
+  async getAllStoredData() {
+    if (!this.db) await this.init();
+    const result = {
+      messagesByChat: {},
+      conversations: this.memCache.conversations || [],
+      totalMessages: 0
+    };
+
+    if (this.db) {
+      try {
+        const tx = this.db.transaction('messages', 'readonly');
+        const store = tx.objectStore('messages');
+        const allMsgs = await new Promise((res) => {
+          const req = store.getAll();
+          req.onsuccess = () => res(req.result || []);
+          req.onerror = () => res([]);
+        });
+        for (const m of allMsgs) {
+          const k = m.chatKey || 'general';
+          if (!result.messagesByChat[k]) result.messagesByChat[k] = [];
+          result.messagesByChat[k].push(m);
+          result.totalMessages++;
+        }
+      } catch (_) {}
+    }
+
+    // Merge memory cache keys
+    for (const [k, msgs] of this.memCache.messages.entries()) {
+      if (!result.messagesByChat[k]) {
+        result.messagesByChat[k] = [...msgs];
+        result.totalMessages += msgs.length;
+      }
+    }
+
+    return result;
+  },
+
   async saveInbox(conversations) {
     if (!Array.isArray(conversations)) return;
     this.memCache.conversations = [...conversations];
@@ -471,10 +508,19 @@ const el = {
   campusDirectoryList: document.getElementById('campus-directory-list'),
   friendRequestsContainer: document.getElementById('friend-requests-container'),
   friendRequestsList: document.getElementById('friend-requests-list'),
+  noFriendRequestsPlaceholder: document.getElementById('no-friend-requests-placeholder'),
+  outgoingRequestsSection: document.getElementById('outgoing-requests-section'),
+  outgoingRequestsList: document.getElementById('outgoing-requests-list'),
+  outgoingRequestsCount: document.getElementById('outgoing-requests-count'),
   requestsBadge: document.getElementById('requests-badge'),
   friendsRequestsTabBadge: document.getElementById('friends-requests-tab-badge'),
+  requestsSubtabBadge: document.getElementById('requests-subtab-badge'),
   myFriendsCount: document.getElementById('my-friends-count'),
-  totalStudentsCount: document.getElementById('total-students-count'),
+  myFriendsTabCount: document.getElementById('my-friends-tab-count'),
+  friendsSubtabsNav: document.getElementById('friends-subtabs-nav'),
+  myFriendsSectionWrap: document.getElementById('my-friends-section-wrap'),
+  campusDirectorySectionWrap: document.getElementById('campus-directory-section-wrap'),
+  directorySearchBarWrap: document.getElementById('directory-search-bar-wrap'),
   filterChipsBar: document.getElementById('filter-chips-bar'),
   noChatsPlaceholder: document.getElementById('no-chats-placeholder'),
   noFriendsPlaceholder: document.getElementById('no-friends-placeholder'),
@@ -644,15 +690,24 @@ const el = {
   inappBannerAvatar: document.getElementById('inapp-banner-avatar'),
   inappBannerTitle: document.getElementById('inapp-banner-title'),
   inappBannerText: document.getElementById('inapp-banner-text'),
-  // Profile Safety Actions (Unfriend & Block)
+  // Profile Safety Actions (Unfriend, Block & Export)
+  profileBtnExportChat: document.getElementById('profile-btn-export-chat'),
   profileBtnUnfriend: document.getElementById('profile-btn-unfriend'),
   profileBtnBlock: document.getElementById('profile-btn-block'),
   profileBlockLabel: document.getElementById('profile-block-label'),
   // Notifications & Alerts Settings
   togglePushNotifications: document.getElementById('toggle-push-notifications'),
+  btnTestNotification: document.getElementById('btn-test-notification'),
   toggleNotificationSound: document.getElementById('toggle-notification-sound'),
   toggleHapticVibration: document.getElementById('toggle-haptic-vibration'),
   toggleMessagePreviews: document.getElementById('toggle-message-previews'),
+  // WhatsApp Style Chat Backup & Restore
+  btnBackupNow: document.getElementById('btn-backup-now'),
+  btnRestoreBackup: document.getElementById('btn-restore-backup'),
+  backupFileInput: document.getElementById('backup-file-input'),
+  backupStatusText: document.getElementById('backup-status-text'),
+  backupDetailsText: document.getElementById('backup-details-text'),
+  toggleAutoBackup: document.getElementById('toggle-auto-backup'),
   settingsBlockedList: document.getElementById('settings-blocked-list'),
   settingsBlockedCount: document.getElementById('settings-blocked-count'),
   btnGenerateAvatar: document.getElementById('btn-generate-avatar'),
@@ -1683,31 +1738,52 @@ function connectEventSource() {
     } catch (_) {}
   });
 
-  state.eventSource.addEventListener('friend_added', (e) => {
-    const data = JSON.parse(e.data);
-    showToast(`Connected with @${data.friend.username}!`, '🤝');
-    playReceivedSound();
-    loadFriendsList();
-    loadRecentChats();
-    loadCampusDirectory();
-    loadFriendRequests();
-  });
+  const handleFriendAddedEvent = (e) => {
+    try {
+      const data = JSON.parse(e.data);
+      const name = data.friend ? (data.friend.displayName || data.friend.username) : 'Classmate';
+      showToast(`Connected with @${(data.friend && data.friend.username) || 'friend'}!`, '🤝');
+      playReceivedSound();
+      showNativePushNotification('Connected with Classmate 🎉', `You and @${name} are now connected on OC Connect!`, data.friend ? data.friend.username : '');
+      loadFriendsList();
+      loadRecentChats();
+      loadCampusDirectory();
+      loadFriendRequests();
+    } catch (_) {}
+  };
+  state.eventSource.addEventListener('friend_added', handleFriendAddedEvent);
 
-  state.eventSource.addEventListener('friend_request_received', (e) => {
-    const data = JSON.parse(e.data);
-    playReceivedSound();
-    showToast(`📬 New friend request from @${data.from}!`, '📬');
-    loadFriendRequests();
-  });
+  const handleFriendRequestEvent = (e) => {
+    try {
+      const data = JSON.parse(e.data);
+      const requester = data.fromName || data.from || 'Classmate';
+      playReceivedSound();
+      triggerHapticFeedback([30, 60, 30]);
+      showToast(`📬 New friend request from @${data.from}!`, '📬');
+      showNativePushNotification('New Friend Request 📬', `@${requester} sent you a friend request on OC Connect`, data.from);
+      loadFriendRequests();
+    } catch (_) {}
+  };
+  state.eventSource.addEventListener('friend_request_received', handleFriendRequestEvent);
+  state.eventSource.addEventListener('friend_request', handleFriendRequestEvent);
 
-  state.eventSource.addEventListener('friend_request_accepted', (e) => {
-    const data = JSON.parse(e.data);
-    playReceivedSound();
-    showToast(`🎉 @${data.friend.username} accepted your friend request!`, '🎉');
-    loadFriendsList();
-    loadRecentChats();
-    loadCampusDirectory();
-  });
+  const handleFriendAcceptedEvent = (e) => {
+    try {
+      const data = JSON.parse(e.data);
+      const friendHandle = (data.friend && data.friend.username) || '';
+      const friendName = (data.friend && (data.friend.displayName || data.friend.username)) || friendHandle;
+      playReceivedSound();
+      triggerHapticFeedback([40, 80, 40]);
+      showToast(`🎉 @${friendHandle} accepted your friend request!`, '🎉');
+      showNativePushNotification('Friend Request Accepted 🎉', `@${friendName} is now connected with you on OC Connect!`, friendHandle);
+      loadFriendsList();
+      loadRecentChats();
+      loadCampusDirectory();
+      loadFriendRequests();
+    } catch (_) {}
+  };
+  state.eventSource.addEventListener('friend_request_accepted', handleFriendAcceptedEvent);
+  state.eventSource.addEventListener('friend_accepted', handleFriendAcceptedEvent);
 
   state.eventSource.addEventListener('friend_removed', (e) => {
     try {
@@ -2024,10 +2100,22 @@ function triggerHapticFeedback(pattern = [15]) {
 
 function initNotificationSettings() {
   const prefs = getNotificationPrefs();
-  if (el.togglePushNotifications) el.togglePushNotifications.checked = prefs.push;
+  const hasPerm = ('Notification' in window) && Notification.permission === 'granted';
+  if (el.togglePushNotifications) el.togglePushNotifications.checked = prefs.push && hasPerm;
   if (el.toggleNotificationSound) el.toggleNotificationSound.checked = prefs.sound;
   if (el.toggleHapticVibration) el.toggleHapticVibration.checked = prefs.haptic;
   if (el.toggleMessagePreviews) el.toggleMessagePreviews.checked = prefs.preview;
+  if (el.toggleAutoBackup) el.toggleAutoBackup.checked = localStorage.getItem('oc_auto_backup') !== 'false';
+  if (typeof ChatBackupEngine !== 'undefined') {
+    ChatBackupEngine.updateBackupUI();
+  }
+}
+
+if (el.toggleAutoBackup) {
+  el.toggleAutoBackup.addEventListener('change', (e) => {
+    localStorage.setItem('oc_auto_backup', e.target.checked ? 'true' : 'false');
+    showToast(e.target.checked ? 'Auto-backup enabled 💾' : 'Auto-backup disabled', 'ℹ️');
+  });
 }
 
 if (el.togglePushNotifications) {
@@ -2305,6 +2393,242 @@ function showInAppNotification(senderName, messageText, avatarColor, targetUsern
   }
 }
 
+// Test Notification Action (fires rich test alert to lockscreen & tray)
+async function testPushNotification() {
+  playReceivedSound();
+  triggerHapticFeedback([40, 80, 40]);
+
+  if (!('Notification' in window)) {
+    showToast('Push notifications are not supported by this browser.', '⚠️');
+    return;
+  }
+
+  let perm = Notification.permission;
+  if (perm !== 'granted') {
+    try {
+      perm = await Notification.requestPermission();
+    } catch (_) {}
+  }
+
+  if (perm === 'granted') {
+    localStorage.setItem('oc_notify_push', 'true');
+    if (el.togglePushNotifications) el.togglePushNotifications.checked = true;
+
+    showToast('Push alert sent! Check your notification bar & lockscreen 🔔', '✅');
+
+    await showNativePushNotification(
+      'OC Connect Alert 🔔',
+      'Push notification verified! You will receive instant alerts for incoming chats & calls on your screen.',
+      'system'
+    );
+  } else {
+    showToast('Notification permission was denied. Please allow notifications in browser/system settings.', '⚠️');
+    if (el.togglePushNotifications) el.togglePushNotifications.checked = false;
+  }
+}
+
+if (el.btnTestNotification) {
+  el.btnTestNotification.addEventListener('click', testPushNotification);
+}
+
+// ===========================================================================
+// WHATSAPP / TELEGRAM STYLE CHAT BACKUP & RESTORE ENGINE
+// Backs up full conversation history, media records, and metadata to device
+// Allows restoring chats with zero data loss even across device wipes
+// ===========================================================================
+const ChatBackupEngine = {
+  async createFullBackup() {
+    const user = state.currentUser ? state.currentUser.username : 'student';
+    showToast('Creating full chat backup...', '💾');
+
+    // 1. Collect all local device messages from IndexedDB
+    const localData = await LocalDeviceStore.getAllStoredData();
+
+    // 2. Fetch server-side backup if reachable
+    let serverBackup = null;
+    try {
+      const res = await fetch(`/api/backup/export?me=${encodeURIComponent(user)}`);
+      if (res.ok) serverBackup = await res.json();
+    } catch (_) {}
+
+    // 3. Assemble backup archive
+    const backupPackage = {
+      app: 'OC Connect',
+      type: 'oc_connect_chat_backup',
+      version: 2,
+      createdAt: Date.now(),
+      createdDate: new Date().toISOString(),
+      user: {
+        username: user,
+        displayName: (state.currentUser && state.currentUser.displayName) || user,
+        ocId: (state.currentUser && state.currentUser.ocId) || user
+      },
+      friends: state.friends || [],
+      conversations: localData.conversations || [],
+      localChats: localData.messagesByChat || {},
+      serverChats: (serverBackup && serverBackup.chats) || {},
+      starredMessages: Array.from(state.starredMessagesSet || []),
+      pinnedChats: Array.from(state.pinnedChatsSet || []),
+      totalMessages: localData.totalMessages || 0
+    };
+
+    const jsonStr = JSON.stringify(backupPackage, null, 2);
+    const blob = new Blob([jsonStr], { type: 'application/json' });
+    const sizeKB = Math.round(blob.size / 1024) || 1;
+
+    // 4. Download backup file to device
+    const filename = `OC_Connect_Backup_${user}_${new Date().toISOString().slice(0, 10)}.json`;
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    setTimeout(() => URL.revokeObjectURL(url), 2000);
+
+    // 5. Update last backup record in local storage
+    const backupInfo = {
+      timestamp: Date.now(),
+      formattedDate: new Date().toLocaleString(),
+      sizeKB: sizeKB,
+      chatsCount: Object.keys(backupPackage.localChats).length,
+      messagesCount: backupPackage.totalMessages
+    };
+    localStorage.setItem('oc_last_backup_info', JSON.stringify(backupInfo));
+    this.updateBackupUI();
+
+    showToast(`Backup downloaded! (${sizeKB} KB, ${backupInfo.messagesCount} msgs) 📥`, '✅');
+  },
+
+  async restoreFromFile(file) {
+    if (!file) return;
+    showToast('Restoring chats from backup...', '🔄');
+
+    try {
+      const text = await file.text();
+      const data = JSON.parse(text);
+
+      if (!data || (!data.localChats && !data.chats)) {
+        showToast('Invalid backup file format.', '⚠️');
+        return;
+      }
+
+      let restoredCount = 0;
+      const chatsToRestore = data.localChats || data.chats || {};
+
+      for (const [chatKey, msgs] of Object.entries(chatsToRestore)) {
+        if (Array.isArray(msgs) && msgs.length > 0) {
+          await LocalDeviceStore.saveMessages(chatKey, msgs);
+          restoredCount += msgs.length;
+        }
+      }
+
+      if (Array.isArray(data.starredMessages)) {
+        data.starredMessages.forEach(id => state.starredMessagesSet.add(id));
+      }
+      if (Array.isArray(data.pinnedChats)) {
+        data.pinnedChats.forEach(id => state.pinnedChatsSet.add(id));
+      }
+
+      const backupInfo = {
+        timestamp: Date.now(),
+        formattedDate: new Date().toLocaleString(),
+        sizeKB: Math.round(file.size / 1024) || 1,
+        chatsCount: Object.keys(chatsToRestore).length,
+        messagesCount: restoredCount
+      };
+      localStorage.setItem('oc_last_backup_info', JSON.stringify(backupInfo));
+      this.updateBackupUI();
+
+      loadRecentChats();
+      if (state.currentChatTarget) {
+        openChat(state.currentChatTarget, state.currentChatTitle, state.isChannel);
+      }
+
+      showToast(`Restored ${restoredCount} messages successfully! 🎉`, '✅');
+    } catch (err) {
+      showToast('Error restoring backup: ' + err.message, '❌');
+    }
+  },
+
+  async exportSingleChat(partnerUsername, isChannel = false, isGroup = false) {
+    if (!partnerUsername) return;
+    showToast('Exporting conversation...', '📄');
+
+    const chatKey = LocalDeviceStore.getChatKey(partnerUsername, isGroup, isChannel);
+    const messages = await LocalDeviceStore.getMessages(chatKey);
+
+    let textContent = `====================================================\n`;
+    textContent += `OC CONNECT CHAT TRANSCRIPT\n`;
+    textContent += `Conversation with: @${partnerUsername}\n`;
+    textContent += `Export Date: ${new Date().toLocaleString()}\n`;
+    textContent += `Total Messages: ${messages.length}\n`;
+    textContent += `====================================================\n\n`;
+
+    messages.forEach(m => {
+      const timeStr = new Date(m.timestamp || Date.now()).toLocaleString();
+      const sender = m.displayName || m.sender || 'Unknown';
+      let msgText = m.text || '';
+      if (m.voice) msgText += ` [Voice message: ${m.voice.duration || 0}s]`;
+      if (m.file) msgText += ` [Attachment: ${m.file.name || 'file'}]`;
+      if (m.image) msgText += ` [Photo]`;
+      textContent += `[${timeStr}] ${sender}: ${msgText}\n`;
+    });
+
+    const blob = new Blob([textContent], { type: 'text/plain;charset=utf-8' });
+    const filename = `OC_Chat_${partnerUsername}_${new Date().toISOString().slice(0, 10)}.txt`;
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    setTimeout(() => URL.revokeObjectURL(url), 2000);
+
+    showToast(`Chat transcript downloaded! 📄`, '✅');
+  },
+
+  updateBackupUI() {
+    const raw = localStorage.getItem('oc_last_backup_info');
+    if (!raw) {
+      if (el.backupStatusText) el.backupStatusText.textContent = 'Last Backup: Never';
+      if (el.backupDetailsText) el.backupDetailsText.textContent = '0 chats • 0 messages • 0 KB';
+      return;
+    }
+    try {
+      const info = JSON.parse(raw);
+      if (el.backupStatusText) el.backupStatusText.textContent = `Last Backup: ${info.formattedDate}`;
+      if (el.backupDetailsText) el.backupDetailsText.textContent = `${info.chatsCount || 0} chats • ${info.messagesCount || 0} messages • ${info.sizeKB || 0} KB`;
+    } catch (_) {}
+  }
+};
+
+// Wire Backup UI Buttons
+if (el.btnBackupNow) {
+  el.btnBackupNow.addEventListener('click', () => ChatBackupEngine.createFullBackup());
+}
+
+if (el.btnRestoreBackup && el.backupFileInput) {
+  el.btnRestoreBackup.addEventListener('click', () => el.backupFileInput.click());
+  el.backupFileInput.addEventListener('change', (e) => {
+    const file = e.target.files && e.target.files[0];
+    if (file) {
+      ChatBackupEngine.restoreFromFile(file);
+      el.backupFileInput.value = '';
+    }
+  });
+}
+
+if (el.profileBtnExportChat) {
+  el.profileBtnExportChat.addEventListener('click', () => {
+    if (state.currentChatTarget) {
+      ChatBackupEngine.exportSingleChat(state.currentChatTarget, state.isChannel, state.isGroup);
+    }
+  });
+}
+
 // Zero-Latency Optimistic Inbox Item Update (bypasses multi-endpoint HTTP requests)
 function updateInboxItemOptimistic(chatKey, message, isGroup = false, groupTitle = '') {
   if (!el.chatsList || !chatKey) return;
@@ -2532,31 +2856,57 @@ function updateFriendsOnlineCount() {
   el.friendsOnlineCount.textContent = `${onlineCount} online`;
 }
 
-// LOAD FRIEND REQUESTS SECTION (INCOMING)
+// LOAD FRIEND REQUESTS SECTION (INCOMING & OUTGOING)
 async function loadFriendRequests() {
   if (!state.currentUser) return;
   try {
     const res = await fetch(`/api/friends/requests?username=${encodeURIComponent(state.currentUser.username)}`);
     const data = await res.json();
-    state.incomingRequests = data.incoming || [];
+    state.incomingRequests = data.incoming || data.requests || [];
+    state.outgoingRequests = data.outgoing || [];
 
-    if (state.incomingRequests.length > 0) {
-      el.friendRequestsContainer.classList.remove('hidden');
-      el.requestsBadge.textContent = state.incomingRequests.length;
-      el.friendsRequestsTabBadge.textContent = state.incomingRequests.length;
-      el.friendsRequestsTabBadge.classList.remove('hidden');
-      renderFriendRequests(state.incomingRequests);
-    } else {
-      el.friendRequestsContainer.classList.add('hidden');
-      el.friendsRequestsTabBadge.classList.add('hidden');
+    const incomingCount = state.incomingRequests.length;
+    const outgoingCount = state.outgoingRequests.length;
+
+    if (el.requestsBadge) el.requestsBadge.textContent = incomingCount;
+    if (el.outgoingRequestsCount) el.outgoingRequestsCount.textContent = outgoingCount;
+
+    if (el.requestsSubtabBadge) {
+      el.requestsSubtabBadge.textContent = incomingCount;
+      if (incomingCount > 0) {
+        el.requestsSubtabBadge.classList.remove('hidden');
+      } else {
+        el.requestsSubtabBadge.classList.add('hidden');
+      }
     }
+
+    if (el.friendsRequestsTabBadge) {
+      el.friendsRequestsTabBadge.textContent = incomingCount;
+      if (incomingCount > 0) {
+        el.friendsRequestsTabBadge.classList.remove('hidden');
+      } else {
+        el.friendsRequestsTabBadge.classList.add('hidden');
+      }
+    }
+
+    renderFriendRequests(state.incomingRequests);
+    renderOutgoingRequests(state.outgoingRequests);
   } catch (err) {
     console.error('Error loading friend requests:', err);
   }
 }
 
 function renderFriendRequests(requests) {
+  if (!el.friendRequestsList) return;
   el.friendRequestsList.innerHTML = '';
+
+  if (!requests || requests.length === 0) {
+    if (el.noFriendRequestsPlaceholder) el.noFriendRequestsPlaceholder.classList.remove('hidden');
+    return;
+  }
+
+  if (el.noFriendRequestsPlaceholder) el.noFriendRequestsPlaceholder.classList.add('hidden');
+
   requests.forEach(r => {
     const card = document.createElement('div');
     card.className = 'request-card';
@@ -2565,28 +2915,66 @@ function renderFriendRequests(requests) {
         ${(r.fromName || r.from).charAt(0).toUpperCase()}
       </div>
       <div class="request-info">
-        <div class="request-name">${r.fromName || r.from} <small style="color:var(--text-light);font-weight:normal">@${r.from}</small></div>
-        <div class="request-major">${r.major || 'Okanagan College'}</div>
+        <div class="request-name">${escapeHtml(r.fromName || r.from)} <small style="color:var(--text-light);font-weight:normal">@${escapeHtml(r.from)}</small></div>
+        <div class="request-major">${escapeHtml(r.major || 'Okanagan College')}</div>
       </div>
       <div class="request-actions">
-        <button class="btn-accept-request" data-from="${r.from}">✓ Accept</button>
-        <button class="btn-decline-request" data-from="${r.from}">✕</button>
+        <button class="btn-accept-request" data-from="${r.from}" data-id="${r.id || ''}">✓ Accept</button>
+        <button class="btn-decline-request" data-from="${r.from}" data-id="${r.id || ''}">✕</button>
       </div>
     `;
 
-    card.querySelector('.btn-accept-request').addEventListener('click', () => {
-      respondToRequest(r.from, 'accept');
+    card.querySelector('.btn-accept-request').addEventListener('click', (e) => {
+      e.stopPropagation();
+      respondToRequest(r.from, 'accept', r.id);
     });
 
-    card.querySelector('.btn-decline-request').addEventListener('click', () => {
-      respondToRequest(r.from, 'decline');
+    card.querySelector('.btn-decline-request').addEventListener('click', (e) => {
+      e.stopPropagation();
+      respondToRequest(r.from, 'decline', r.id);
     });
 
     el.friendRequestsList.appendChild(card);
   });
 }
 
-async function respondToRequest(fromUsername, action) {
+function renderOutgoingRequests(outgoing) {
+  if (!el.outgoingRequestsList) return;
+  el.outgoingRequestsList.innerHTML = '';
+
+  if (!outgoing || outgoing.length === 0) {
+    if (el.outgoingRequestsSection) el.outgoingRequestsSection.classList.add('hidden');
+    return;
+  }
+
+  if (el.outgoingRequestsSection) el.outgoingRequestsSection.classList.remove('hidden');
+
+  outgoing.forEach(o => {
+    const card = document.createElement('div');
+    card.className = 'outgoing-request-card';
+    card.innerHTML = `
+      <div class="avatar-circle" style="width:36px;height:36px;font-size:13px;background-color:${o.avatarColor || '#007AFF'}">
+        ${(o.toName || o.to).charAt(0).toUpperCase()}
+      </div>
+      <div class="request-info">
+        <div class="request-name" style="font-size:13px;">${escapeHtml(o.toName || o.to)} <small style="color:var(--text-light)">@${escapeHtml(o.to)}</small></div>
+        <div style="font-size:11px;color:var(--text-muted)">Pending classmate approval</div>
+      </div>
+      <div class="request-actions">
+        <button class="btn-cancel-request" data-to="${o.to}">Cancel</button>
+      </div>
+    `;
+
+    card.querySelector('.btn-cancel-request').addEventListener('click', (e) => {
+      e.stopPropagation();
+      cancelFriendRequestAction(o.to);
+    });
+
+    el.outgoingRequestsList.appendChild(card);
+  });
+}
+
+async function respondToRequest(fromUsername, action, requestId = null) {
   try {
     const res = await fetch('/api/friends/request/respond', {
       method: 'POST',
@@ -2594,6 +2982,7 @@ async function respondToRequest(fromUsername, action) {
       body: JSON.stringify({
         me: state.currentUser.username,
         from: fromUsername,
+        requestId: requestId,
         action: action
       })
     });
@@ -2601,7 +2990,7 @@ async function respondToRequest(fromUsername, action) {
 
     if (action === 'accept') {
       playReceivedSound();
-      showToast(`Connected with @${fromUsername}!`, '🎉');
+      showToast(`Connected with @${fromUsername}! 🎉`, '🎉');
       loadFriendRequests();
       loadFriendsList();
       loadRecentChats();
@@ -2612,6 +3001,26 @@ async function respondToRequest(fromUsername, action) {
     }
   } catch (err) {
     showToast('Error responding to request: ' + err.message, '❌');
+  }
+}
+
+async function cancelFriendRequestAction(targetUsername) {
+  try {
+    const res = await fetch('/api/friends/request/cancel', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        me: state.currentUser.username,
+        to: targetUsername
+      })
+    });
+    if (res.ok) {
+      showToast(`Canceled friend request to @${targetUsername}`);
+      loadFriendRequests();
+      loadCampusDirectory();
+    }
+  } catch (err) {
+    showToast('Error canceling request: ' + err.message, '❌');
   }
 }
 
@@ -2713,19 +3122,7 @@ async function loadCampusDirectory() {
 function renderCampusDirectory(students) {
   el.campusDirectoryList.innerHTML = '';
   if (!students || students.length === 0) {
-    if (!state.directorySearchQuery) {
-      el.campusDirectoryList.innerHTML = `
-        <div style="text-align:center;padding:28px 16px;color:var(--text-light)">
-          <div style="font-size:28px;margin-bottom:8px">🔒</div>
-          <strong style="color:var(--text-dark);font-size:14px">Student Privacy Protected</strong>
-          <p style="font-size:12px;margin-top:6px;line-height:1.5;max-width:320px;margin-left:auto;margin-right:auto">
-            To preserve student safety and privacy, public directory browsing is restricted. Type an exact <strong>@username</strong> in the search bar above to find and connect with classmates.
-          </p>
-        </div>
-      `;
-    } else {
-      el.campusDirectoryList.innerHTML = `<div class="empty-inline-hint">No registered classmates match "@${escapeHtml(state.directorySearchQuery)}".</div>`;
-    }
+    el.campusDirectoryList.innerHTML = `<div class="empty-inline-hint" style="padding:24px 16px;text-align:center;">No registered classmates found. Try searching by name, handle, or program above.</div>`;
     return;
   }
 
@@ -2743,10 +3140,10 @@ function renderCampusDirectory(students) {
       </div>
       <div class="item-content">
         <div class="item-top-row">
-          <span class="item-name">${s.displayName || s.username} ${blueTickHtml} <small style="color:var(--text-light);font-weight:normal">@${s.username}</small></span>
+          <span class="item-name">${escapeHtml(s.displayName || s.username)} ${blueTickHtml} <small style="color:var(--text-light);font-weight:normal">@${escapeHtml(s.username)}</small></span>
         </div>
         <div class="item-bottom-row">
-          <span class="item-snippet ${s.online ? 'status-online' : ''}">${s.online ? '● Online' : s.major}</span>
+          <span class="item-snippet ${s.online ? 'status-online' : ''}">${s.online ? '● Online' : escapeHtml(s.major || 'Okanagan College')}</span>
         </div>
       </div>
       <div class="item-actions">
@@ -2770,6 +3167,37 @@ function renderCampusDirectory(students) {
 
     item.addEventListener('click', () => openChat(s.username, s.displayName, false, s.online));
     el.campusDirectoryList.appendChild(item);
+  });
+}
+
+// Friends Subtabs Switching (Directory, Friends, Requests)
+if (el.friendsSubtabsNav) {
+  el.friendsSubtabsNav.querySelectorAll('.friends-subtab-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      el.friendsSubtabsNav.querySelectorAll('.friends-subtab-btn').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      const subtab = btn.dataset.subtab;
+
+      if (subtab === 'all') {
+        if (el.directorySearchBarWrap) el.directorySearchBarWrap.classList.remove('hidden');
+        if (el.campusDirectorySectionWrap) el.campusDirectorySectionWrap.classList.remove('hidden');
+        if (el.myFriendsSectionWrap) el.myFriendsSectionWrap.classList.remove('hidden');
+        if (el.friendRequestsContainer) el.friendRequestsContainer.classList.remove('hidden');
+        loadCampusDirectory();
+      } else if (subtab === 'friends') {
+        if (el.directorySearchBarWrap) el.directorySearchBarWrap.classList.add('hidden');
+        if (el.campusDirectorySectionWrap) el.campusDirectorySectionWrap.classList.add('hidden');
+        if (el.myFriendsSectionWrap) el.myFriendsSectionWrap.classList.remove('hidden');
+        if (el.friendRequestsContainer) el.friendRequestsContainer.classList.add('hidden');
+        loadFriendsList();
+      } else if (subtab === 'requests') {
+        if (el.directorySearchBarWrap) el.directorySearchBarWrap.classList.add('hidden');
+        if (el.campusDirectorySectionWrap) el.campusDirectorySectionWrap.classList.add('hidden');
+        if (el.myFriendsSectionWrap) el.myFriendsSectionWrap.classList.add('hidden');
+        if (el.friendRequestsContainer) el.friendRequestsContainer.classList.remove('hidden');
+        loadFriendRequests();
+      }
+    });
   });
 }
 
@@ -6724,19 +7152,6 @@ async function openAddFriendModal() {
 }
 
 async function loadDirectoryInModal(query = '') {
-  if (!query) {
-    el.searchResultsList.innerHTML = `
-      <div style="text-align:center;padding:24px 16px;color:var(--text-light)">
-        <div style="font-size:28px;margin-bottom:8px">🔒</div>
-        <strong style="color:var(--text-dark);font-size:14px">Student Privacy Protected</strong>
-        <p style="font-size:12px;margin-top:6px;line-height:1.5;max-width:320px;margin-left:auto;margin-right:auto">
-          To protect student privacy, please enter a classmate's exact <strong>@username</strong> above to search and connect.
-        </p>
-      </div>
-    `;
-    return;
-  }
-
   try {
     const res = await fetch(`/api/users/all?me=${encodeURIComponent(state.currentUser.username)}&query=${encodeURIComponent(query)}`);
     const data = await res.json();
