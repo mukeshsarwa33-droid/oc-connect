@@ -1589,55 +1589,31 @@ window.addEventListener('DOMContentLoaded', async () => {
   const token = localStorage.getItem('oc_connect_auth_token');
   const cachedUserStr = localStorage.getItem('oc_connect_user');
 
-  // Instant Sub-30ms Startup from Device Storage
-  if (token && cachedUserStr) {
+  // WhatsApp-Style Permanent Session: Set Once, Stay Signed In Forever
+  if (cachedUserStr) {
     try {
       const cachedUser = JSON.parse(cachedUserStr);
       if (cachedUser && cachedUser.username) {
         state.currentUser = cachedUser;
         showMainScreen();
 
-        // Concurrently validate/refresh token with server in background
-        fetch('/api/auth/session', {
-          headers: { 'Authorization': 'Bearer ' + token }
+        // Background validate / sync latest profile without interrupting the user
+        const authHeaders = token ? { 'Authorization': 'Bearer ' + token } : {};
+        fetch(token ? '/api/auth/session' : `/api/users/me?username=${encodeURIComponent(cachedUser.username)}`, {
+          headers: authHeaders
         }).then(res => {
-          if (res.ok) {
-            return res.json();
-          } else if (res.status === 401) {
-            // Session revoked or expired on server: smoothly reset to login without infinite reload loop
-            localStorage.removeItem('oc_connect_auth_token');
-            localStorage.removeItem('oc_connect_user');
-            state.currentUser = null;
-            if (el.authScreen) el.authScreen.classList.remove('hidden');
-            if (el.mainScreen) el.mainScreen.classList.add('hidden');
-            if (el.chatScreen) {
-              el.chatScreen.classList.add('hidden');
-              el.chatScreen.classList.remove('open');
-            }
-            showToast('Session expired. Please sign in again.', '🔒');
-          }
+          if (res.ok) return res.json();
+          return null;
         }).then(data => {
           if (data && data.user) {
-            state.currentUser = data.user;
-            localStorage.setItem('oc_connect_user', JSON.stringify(data.user));
+            state.currentUser = { ...state.currentUser, ...data.user };
+            localStorage.setItem('oc_connect_user', JSON.stringify(state.currentUser));
             updateAllMyAvatarInstances();
           }
         }).catch(() => {
-          // Offline / Tunnel reconnection: keep smooth offline session active
+          // Offline / network hitch: stay logged in seamlessly!
         });
 
-        return;
-      }
-    } catch (_) {}
-  } else if (cachedUserStr) {
-    // Legacy session migration to token
-    try {
-      const cachedUser = JSON.parse(cachedUserStr);
-      const res = await fetch(`/api/users/me?username=${encodeURIComponent(cachedUser.username)}`);
-      if (res.ok) {
-        const data = await res.json();
-        state.currentUser = data.user;
-        showMainScreen();
         return;
       }
     } catch (_) {}
@@ -1828,12 +1804,20 @@ function checkAndTriggerOnboarding() {
 // Real-Time EventSource (SSE) with Auto-Reconnect
 function connectEventSource() {
   if (state.eventSource) {
-    state.eventSource.close();
+    try { state.eventSource.close(); } catch (_) {}
   }
   clearTimeout(state.reconnectTimer);
 
+  if (!state.currentUser || !state.currentUser.username) return;
+
   const streamUrl = `/api/stream?username=${encodeURIComponent(state.currentUser.username)}`;
   state.eventSource = new EventSource(streamUrl);
+
+  state.eventSource.onopen = () => {
+    el.connectionStatus.textContent = '● Live Real-Time';
+    el.connectionStatus.className = 'status-indicator online';
+    state._reconnectBackoff = 1000;
+  };
 
   state.eventSource.addEventListener('connected', () => {
     el.connectionStatus.textContent = '● Live Real-Time';
@@ -2240,9 +2224,28 @@ function connectEventSource() {
     el.connectionStatus.textContent = '○ Reconnecting...';
     el.connectionStatus.className = 'status-indicator offline';
     clearTimeout(state.reconnectTimer);
-    state.reconnectTimer = setTimeout(connectEventSource, 2000);
+    const delay = state._reconnectBackoff || 1500;
+    state._reconnectBackoff = Math.min((state._reconnectBackoff || 1500) * 1.5, 10000);
+    state.reconnectTimer = setTimeout(connectEventSource, delay);
   };
 }
+
+// Telegram-Style Keep-Alive: Instantly Reconnect When Tab/App Comes Back to Foreground or Online
+window.addEventListener('online', () => {
+  if (state.currentUser) {
+    el.connectionStatus.textContent = '● Connecting...';
+    connectEventSource();
+    loadRecentChats();
+  }
+});
+
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'visible' && state.currentUser) {
+    if (!state.eventSource || state.eventSource.readyState === EventSource.CLOSED) {
+      connectEventSource();
+    }
+  }
+});
 
 // ===========================================================================
 // NOTIFICATION & ALERT SYSTEM (In-App Banner, Sound Chimes, Web Push)
@@ -2530,8 +2533,12 @@ function showInAppNotification(senderName, messageText, avatarColor, targetUsern
     triggerHapticFeedback([25, 40, 25]);
   }
 
-  // Native Web Push Notification (when tab is backgrounded / hidden or minimized)
-  if (document.visibilityState !== 'visible' || !document.hasFocus()) {
+  // Always trigger system and lock screen notification if the app is backgrounded or looking at a different chat
+  const cleanActiveTarget = (state.currentChatTarget || '').trim().toLowerCase().replace(/^@/, '');
+  const cleanIncoming = (targetUsername || '').trim().toLowerCase().replace(/^@/, '');
+  const isLookingAtThisExactChat = (cleanActiveTarget === cleanIncoming && document.visibilityState === 'visible' && document.hasFocus());
+
+  if (!isLookingAtThisExactChat) {
     showNativePushNotification(senderName, messageText, targetUsername, isChannel, isGroup, groupName);
   }
 
@@ -3059,6 +3066,12 @@ async function loadFriendRequests() {
       }
     }
 
+    const quickReqBadge = document.getElementById('quick-requests-badge');
+    if (quickReqBadge) {
+      quickReqBadge.textContent = incomingCount;
+      quickReqBadge.style.display = incomingCount > 0 ? 'inline-block' : 'none';
+    }
+
     renderFriendRequests(state.incomingRequests);
     renderOutgoingRequests(state.outgoingRequests);
   } catch (err) {
@@ -3368,6 +3381,20 @@ if (el.friendsSubtabsNav) {
         loadFriendRequests();
       }
     });
+  });
+}
+
+// Quick Friends Requests Pill Handler (from Chats tab)
+const btnQuickRequests = document.getElementById('btn-quick-friend-requests');
+if (btnQuickRequests) {
+  btnQuickRequests.addEventListener('click', () => {
+    // 1. Switch to Friends main tab
+    const friendsTabBtn = document.querySelector('.tab-btn[data-tab="friends"]');
+    if (friendsTabBtn) friendsTabBtn.click();
+
+    // 2. Switch to Requests subtab
+    const reqSubtabBtn = document.querySelector('.friends-subtab-btn[data-subtab="requests"]');
+    if (reqSubtabBtn) reqSubtabBtn.click();
   });
 }
 
@@ -7738,21 +7765,21 @@ if (userChipBtn) {
   userChipBtn.addEventListener('click', openSettingsModal);
 }
 
-// Close button (Done) — auto-saves any un-submitted edits in input fields
+// Close button (Done) — auto-saves any un-submitted edits in all input fields
 if (elSettings.btnClose) {
   elSettings.btnClose.addEventListener('click', async () => {
-    // If user edited display name without pressing save, auto-save now
-    if (elSettings.displayNameInput && state.currentUser) {
-      const currentVal = elSettings.displayNameInput.value.trim();
-      if (currentVal && currentVal !== state.currentUser.displayName) {
+    if (state.currentUser) {
+      if (elSettings.displayNameInput && elSettings.displayNameInput.value.trim() && elSettings.displayNameInput.value.trim() !== state.currentUser.displayName) {
         await saveDisplayNameAction();
       }
-    }
-    // If user edited program without pressing save, auto-save now
-    if (elSettings.majorInput && state.currentUser) {
-      const currentMajor = elSettings.majorInput.value.trim();
-      if (currentMajor && currentMajor !== state.currentUser.major) {
+      if (elSettings.majorInput && elSettings.majorInput.value.trim() && elSettings.majorInput.value.trim() !== state.currentUser.major) {
         await saveMajorAction();
+      }
+      if (elSettings.bioInput && elSettings.bioInput.value.trim() !== (state.currentUser.bio || '')) {
+        await saveBioAction();
+      }
+      if (elSettings.campusSelect && elSettings.campusSelect.value !== state.currentUser.campus) {
+        await saveCampusAction();
       }
     }
     closeModal(elSettings.modal);
@@ -7763,16 +7790,18 @@ if (elSettings.btnClose) {
 if (elSettings.modal) {
   elSettings.modal.addEventListener('click', async (e) => {
     if (e.target === elSettings.modal) {
-      if (elSettings.displayNameInput && state.currentUser) {
-        const currentVal = elSettings.displayNameInput.value.trim();
-        if (currentVal && currentVal !== state.currentUser.displayName) {
+      if (state.currentUser) {
+        if (elSettings.displayNameInput && elSettings.displayNameInput.value.trim() && elSettings.displayNameInput.value.trim() !== state.currentUser.displayName) {
           await saveDisplayNameAction();
         }
-      }
-      if (elSettings.majorInput && state.currentUser) {
-        const currentMajor = elSettings.majorInput.value.trim();
-        if (currentMajor && currentMajor !== state.currentUser.major) {
+        if (elSettings.majorInput && elSettings.majorInput.value.trim() && elSettings.majorInput.value.trim() !== state.currentUser.major) {
           await saveMajorAction();
+        }
+        if (elSettings.bioInput && elSettings.bioInput.value.trim() !== (state.currentUser.bio || '')) {
+          await saveBioAction();
+        }
+        if (elSettings.campusSelect && elSettings.campusSelect.value !== state.currentUser.campus) {
+          await saveCampusAction();
         }
       }
       closeModal(elSettings.modal);
