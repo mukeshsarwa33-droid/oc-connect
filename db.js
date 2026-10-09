@@ -202,6 +202,15 @@ db.exec(`
   CREATE INDEX IF NOT EXISTS idx_sessions_token ON user_sessions(token);
   CREATE INDEX IF NOT EXISTS idx_sessions_user ON user_sessions(username);
   CREATE INDEX IF NOT EXISTS idx_reactions_msg ON message_reactions(message_id);
+
+  CREATE TABLE IF NOT EXISTS pending_notifications (
+    id TEXT PRIMARY KEY,
+    username TEXT NOT NULL,
+    event_name TEXT NOT NULL,
+    data TEXT NOT NULL,
+    created_at INTEGER NOT NULL
+  );
+  CREATE INDEX IF NOT EXISTS idx_pending_notif_user ON pending_notifications(username, created_at);
 `);
 
 // Safe column migrations for existing databases
@@ -448,7 +457,15 @@ const stmts = {
   getSession: db.prepare('SELECT * FROM user_sessions WHERE token = ?'),
   deleteSession: db.prepare('DELETE FROM user_sessions WHERE token = ?'),
   deleteUserSessions: db.prepare('DELETE FROM user_sessions WHERE username = ?'),
-  cleanupExpiredSessions: db.prepare('DELETE FROM user_sessions WHERE expires_at < ?')
+  cleanupExpiredSessions: db.prepare('DELETE FROM user_sessions WHERE expires_at < ?'),
+
+  // Offline Pending Notification Queue
+  insertPendingNotification: db.prepare(`
+    INSERT INTO pending_notifications (id, username, event_name, data, created_at)
+    VALUES (?, ?, ?, ?, ?)
+  `),
+  getPendingNotifications: db.prepare('SELECT * FROM pending_notifications WHERE username = ? ORDER BY created_at ASC'),
+  deletePendingNotificationsForUser: db.prepare('DELETE FROM pending_notifications WHERE username = ?')
 };
 
 function formatUserRecord(row) {
@@ -1490,6 +1507,37 @@ const DB = {
       createdAt: r.created_at,
       status: r.status
     }));
+  },
+
+  // Offline Pending Notification Queue
+  addPendingNotification(username, eventName, data) {
+    if (!username) return null;
+    const clean = username.trim().toLowerCase().replace(/^@/, '');
+    const id = 'notif_' + Date.now() + '_' + Math.random().toString(36).substr(2, 6);
+    const dataStr = typeof data === 'string' ? data : JSON.stringify(data);
+    stmts.insertPendingNotification.run(id, clean, eventName, dataStr, Date.now());
+    return id;
+  },
+
+  getPendingNotifications(username) {
+    if (!username) return [];
+    const clean = username.trim().toLowerCase().replace(/^@/, '');
+    const rows = stmts.getPendingNotifications.all(clean);
+    return rows.map(r => ({
+      id: r.id,
+      username: r.username,
+      eventName: r.event_name,
+      data: (() => {
+        try { return JSON.parse(r.data); } catch (_) { return r.data; }
+      })(),
+      createdAt: r.created_at
+    }));
+  },
+
+  clearPendingNotifications(username) {
+    if (!username) return;
+    const clean = username.trim().toLowerCase().replace(/^@/, '');
+    stmts.deletePendingNotificationsForUser.run(clean);
   }
 };
 

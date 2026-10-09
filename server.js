@@ -136,7 +136,7 @@ function safeWriteSSE(res, payload) {
   }
 }
 
-// Real-Time SSE Broadcasting Engine (Backpressure-Safe)
+// Real-Time SSE Broadcasting Engine (Backpressure-Safe with Offline Queue)
 function broadcastToUser(username, eventName, data) {
   if (!username) return false;
   const clean = username.trim().toLowerCase().replace(/^@/, '');
@@ -153,6 +153,12 @@ function broadcastToUser(username, eventName, data) {
       }
     }
   }
+
+  // When recipient has no active SSE connection, buffer event into pending_notifications
+  if (!delivered) {
+    DB.addPendingNotification(clean, eventName, data);
+  }
+
   return delivered;
 }
 
@@ -3138,8 +3144,8 @@ const server = http.createServer(async (req, res) => {
         }));
       }
 
-      // 25. SSE Real-Time Stream Endpoint
-      if (pathname === '/api/stream' && req.method === 'GET') {
+      // 25. SSE Real-Time Stream Endpoint (Supports /api/stream and /api/events)
+      if ((pathname === '/api/stream' || pathname === '/api/events') && req.method === 'GET') {
         const username = (parsedUrl.searchParams.get('username') || '').trim().toLowerCase();
         const resolved = resolveUsername(username);
 
@@ -3165,6 +3171,26 @@ const server = http.createServer(async (req, res) => {
           sseConnections.set(resolved, new Set());
         }
         sseConnections.get(resolved).add(res);
+
+        // Flush and delete pending offline notifications immediately
+        const pending = DB.getPendingNotifications(resolved);
+        if (pending && pending.length > 0) {
+          for (const item of pending) {
+            safeWriteSSE(res, `event: ${item.eventName}\ndata: ${JSON.stringify(item.data)}\n\n`);
+            if (item.eventName === 'new_message' && item.data && item.data.message) {
+              const m = item.data.message;
+              DB.markMessageDelivered(m.id);
+              if (m.sender) {
+                broadcastToUser(m.sender, 'message_delivered', {
+                  messageId: m.id,
+                  chatId: item.data.chatId,
+                  status: 'delivered'
+                });
+              }
+            }
+          }
+          DB.clearPendingNotifications(resolved);
+        }
 
         // Mark user online in SQLite
         DB.setUserOnline(resolved, true);
