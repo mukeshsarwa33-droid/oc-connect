@@ -1712,6 +1712,13 @@ function showMainScreen() {
   requestNotificationPermissionPrompt();
   recalculateGlobalUnread();
 
+  // Sync active user with standalone Android APK background service
+  if (state.currentUser && window.AndroidBridge && window.AndroidBridge.setStoredUser) {
+    try {
+      window.AndroidBridge.setStoredUser(state.currentUser.username);
+    } catch (_) {}
+  }
+
   // Load initial data
   loadRecentChats();
   loadFriendsList();

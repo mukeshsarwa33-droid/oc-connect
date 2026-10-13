@@ -239,7 +239,8 @@ const MIME_TYPES = {
   '.png': 'image/png',
   '.jpg': 'image/jpeg',
   '.svg': 'image/svg+xml',
-  '.ico': 'image/x-icon'
+  '.ico': 'image/x-icon',
+  '.apk': 'application/vnd.android.package-archive'
 };
 
 // Global Centralized Error Boundary Handler (Fix 9)
@@ -3517,6 +3518,8 @@ const server = http.createServer(async (req, res) => {
   let safePath = path.normalize(pathname).replace(/^(\.\.[\/\\])+/, '');
   if (safePath === '/' || safePath === '') {
     safePath = '/index.html';
+  } else if (safePath === '/download' || safePath === '/download/apk' || safePath === '/download/oc-connect.apk') {
+    safePath = '/oc-connect.apk';
   }
 
   const filePath = path.join(__dirname, 'public', safePath);
@@ -3538,7 +3541,11 @@ const server = http.createServer(async (req, res) => {
     }
 
     const headers = { 'Content-Type': contentType };
-    if (safePath === '/sw.js') {
+    if (ext === '.apk') {
+      headers['Content-Disposition'] = 'attachment; filename="oc-connect.apk"';
+      headers['Content-Type'] = 'application/vnd.android.package-archive';
+      headers['Cache-Control'] = 'public, max-age=3600';
+    } else if (safePath === '/sw.js') {
       headers['Service-Worker-Allowed'] = '/';
       headers['Cache-Control'] = 'no-cache, no-store, must-revalidate';
     } else {

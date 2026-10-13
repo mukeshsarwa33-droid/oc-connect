@@ -1611,9 +1611,19 @@
         <!-- Android Instructions Panel -->
         <div id="install-panel-android" class="install-panel hidden">
           <div id="android-native-install-prompt-box">
-            <button id="btn-trigger-android-pwa" type="button" class="btn-primary-block" style="margin-bottom:14px;background:#075E54;">
-              <span>⚡ 1-Tap Install on Android</span>
+            <a href="/oc-connect.apk" download="oc-connect.apk" id="btn-download-android-apk" class="btn-primary-block" style="margin-bottom:12px;background:#007AFF;text-decoration:none;display:flex;align-items:center;justify-content:center;gap:8px;font-weight:700;padding:12px;border-radius:12px;color:white;box-shadow:0 4px 12px rgba(0,122,255,0.3);">
+              <span>🤖 Download Standalone APK (1-Click Install)</span>
+            </a>
+            <button id="btn-trigger-android-pwa" type="button" class="btn-secondary-block" style="margin-bottom:14px;background:#E5E5EA;color:#1C1C1E;width:100%;padding:10px;border-radius:12px;border:none;font-weight:600;cursor:pointer;">
+              <span>⚡ Or Install via Browser (PWA)</span>
             </button>
+          </div>
+          <div class="install-step-card" style="background:rgba(0,122,255,0.06);border-left:3px solid #007AFF;">
+            <div class="step-badge" style="background:#007AFF;color:white;">★</div>
+            <div class="step-content">
+              <strong>Native Standalone APK Features</strong>
+              <p>Includes background lock screen push notifications, WhatsApp-style inline notification chat replies, and full offline caching.</p>
+            </div>
           </div>
           <div class="install-step-card">
             <div class="step-badge">1</div>
