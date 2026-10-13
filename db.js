@@ -1392,6 +1392,30 @@ const DB = {
     return this.getMessageById(id);
   },
 
+  deleteMessage(id, username) {
+    if (!id || !username) return false;
+    const cleanUser = username.trim().toLowerCase().replace(/^@/, '');
+    const canonical = this.getCanonicalUsername ? (this.getCanonicalUsername(cleanUser) || cleanUser) : cleanUser;
+    const msg = this.getMessageById(id);
+    if (!msg) return false;
+    const msgSender = (msg.sender || '').trim().toLowerCase().replace(/^@/, '');
+    const canonicalSender = this.getCanonicalUsername ? (this.getCanonicalUsername(msgSender) || msgSender) : msgSender;
+
+    // Allow deletion if sender matches
+    if (canonical !== canonicalSender && cleanUser !== msgSender) {
+      return false;
+    }
+
+    db.prepare('DELETE FROM messages WHERE id = ?').run(id);
+    db.prepare('DELETE FROM message_reactions WHERE message_id = ?').run(id);
+    db.prepare('DELETE FROM starred_messages WHERE message_id = ?').run(id);
+    return true;
+  },
+
+  getRawDb() {
+    return db;
+  },
+
   getPinnedMessages(chatIdOrChannel, isChannel = false) {
     const rows = isChannel
       ? stmts.getPinnedMessagesByChannel.all(chatIdOrChannel.toLowerCase())
@@ -2064,6 +2088,10 @@ function migrateLegacyChatIds() {
 
     // Clean up any self-friendships
     db.prepare('DELETE FROM friends WHERE user1 = user2').run();
+
+    // Clean up raw numeric display names in user record and historic messages
+    db.prepare("UPDATE users SET display_name = 'Mukesh S.' WHERE username = '300354198' AND (display_name = '300354198' OR display_name IS NULL OR display_name = '')").run();
+    db.prepare("UPDATE messages SET display_name = 'Mukesh S.' WHERE sender = '300354198' AND display_name = '300354198'").run();
   } catch (_) {}
 }
 

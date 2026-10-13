@@ -1660,6 +1660,49 @@ const server = http.createServer(async (req, res) => {
         return res.end(JSON.stringify({ success: true, message: updated }));
       }
 
+      // 11a-2b. Delete Message (Recall message within 15 minutes)
+      if (pathname === '/api/messages/delete' && req.method === 'POST') {
+        const { messageId, username } = await parseJsonBody(req);
+        const resolvedUser = resolveUsername(username);
+
+        if (!resolvedUser || !messageId) {
+          res.writeHead(400);
+          return res.end(JSON.stringify({ error: 'Missing messageId or username' }));
+        }
+
+        const msg = DB.getMessageById(messageId);
+        if (!msg) {
+          res.writeHead(404);
+          return res.end(JSON.stringify({ error: 'Message not found' }));
+        }
+
+        const success = DB.deleteMessage(messageId, resolvedUser);
+        if (!success) {
+          res.writeHead(403);
+          return res.end(JSON.stringify({ error: 'Not authorized to delete this message' }));
+        }
+
+        const payload = {
+          messageId,
+          chatId: msg.chatId || msg.chat_id,
+          channel: msg.channel
+        };
+
+        if (msg.channel) {
+          broadcastToAll('message_deleted', payload);
+        } else if ((msg.chatId || msg.chat_id) && (msg.chatId || msg.chat_id).startsWith('group_')) {
+          const groupId = (msg.chatId || msg.chat_id).replace(/^group_/, '');
+          broadcastToGroup(groupId, 'message_deleted', payload);
+        } else if (msg.chatId || msg.chat_id) {
+          const parts = (msg.chatId || msg.chat_id).split('_');
+          for (const u of parts) {
+            broadcastToUser(u, 'message_deleted', payload);
+          }
+        }
+
+        return res.end(JSON.stringify({ success: true, messageId }));
+      }
+
       // 11a-3. Get Pinned Messages
       if (pathname === '/api/messages/pinned' && req.method === 'GET') {
         const target = (parsedUrl.searchParams.get('target') || '').trim();

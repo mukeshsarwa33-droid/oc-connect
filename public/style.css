@@ -4671,6 +4671,11 @@ button, .btn-send-ios, .chat-item, .nav-btn, .avatar-circle, .list-item {
   transform: scale(0.94);
 }
 
+.reaction-action-btn.btn-action-delete:hover {
+  background: rgba(255, 59, 48, 0.12);
+  color: #FF3B30;
+}
+
 @keyframes reactionPop {
   0% {
     opacity: 0;

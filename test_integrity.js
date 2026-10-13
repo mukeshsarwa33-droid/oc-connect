@@ -103,6 +103,37 @@ async function runTestSuite() {
   });
   assert(callMsg && callMsg.call && callMsg.call.action === 'completed', 'Call message successfully recorded with metadata');
 
+  // Test 6: Message Deletion & Authorization
+  console.log('\n--- Test 6: Message Deletion & Authorization ---');
+  const tempMsgId = 'del_test_' + Date.now();
+  DB.saveMessage({
+    id: tempMsgId,
+    chatId: getDeterministicChatId('300354198', '300363794'),
+    sender: '300354198',
+    recipient: '300363794',
+    text: 'Temporary message for deletion test'
+  });
+  // Impostor cannot delete
+  const impostorDelete = DB.deleteMessage(tempMsgId, 'impostor_user_999');
+  assert(impostorDelete === false, 'Unauthorized user cannot delete another student\'s message');
+
+  // Real sender (or canonical alias) can delete
+  const senderDelete = DB.deleteMessage(tempMsgId, 'mukesh'); // 'mukesh' resolves to '300354198'
+  assert(senderDelete === true, 'Authorized sender successfully deleted message');
+  assert(DB.getMessageById(tempMsgId) === null, 'Deleted message is completely purged from database');
+
+  // Cleanup test fixtures
+  try {
+    const db = DB.getRawDb ? DB.getRawDb() : null;
+    if (db) {
+      db.prepare("DELETE FROM user_aliases WHERE alias = 'mukesh_test_alias'").run();
+      db.prepare("DELETE FROM users WHERE username LIKE 'student_test_%'").run();
+      db.prepare("DELETE FROM messages WHERE sender LIKE 'student_test_%' OR recipient LIKE 'student_test_%'").run();
+      db.prepare("DELETE FROM chat_participants WHERE user_id LIKE 'student_test_%'").run();
+      db.prepare("DELETE FROM messages WHERE id LIKE 'call_test_%'").run();
+    }
+  } catch (_) {}
+
   console.log('\n====================================================');
   console.log(`🎉 ALL ${passedTests}/${totalTests} INTEGRITY TESTS PASSED!`);
   console.log('====================================================\n');

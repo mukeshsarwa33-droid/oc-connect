@@ -1870,6 +1870,15 @@ function connectEventSource() {
     } catch (_) {}
   });
 
+  state.eventSource.addEventListener('message_deleted', (e) => {
+    try {
+      const data = JSON.parse(e.data);
+      if (data && data.messageId) {
+        removeMessageFromUI(data.messageId);
+      }
+    } catch (_) {}
+  });
+
   const handleFriendAddedEvent = (e) => {
     try {
       const data = JSON.parse(e.data);
@@ -4351,10 +4360,25 @@ function appendMessageToChat(msg, isSent, prepend = false) {
   let senderNameHtml = '';
   if (!isSent && state.isGroup) {
     const senderColor = getAvatarColor(msg.sender);
-    const displayName = msg.displayName || `@${msg.sender}`;
+    let displayName = msg.displayName || msg.sender;
+    if (/^\d{9}$/.test(displayName) || /^\d{9}$/.test(msg.sender)) {
+      const found = (state.friends && state.friends.find(f => f.username === msg.sender)) ||
+                    (state.allStudents && state.allStudents.find(s => s.username === msg.sender));
+      if (found && found.displayName && !/^\d{9}$/.test(found.displayName)) {
+        displayName = found.displayName;
+      } else if (msg.sender === '300354198') {
+        displayName = 'Mukesh S.';
+      } else if (msg.sender === '300363794') {
+        displayName = 'Aadi';
+      }
+    }
     senderNameHtml = `<span class="group-sender-tag" style="color: ${senderColor};">${escapeHtml(displayName)}</span>`;
   } else if (!isSent && state.isChannel) {
-    senderNameHtml = `<span class="message-sender-name">@${msg.sender}</span>`;
+    let chanDisplay = msg.displayName || `@${msg.sender}`;
+    if (/^\d{9}$/.test(msg.sender) && (msg.sender === '300354198' || msg.sender === '300363794')) {
+      chanDisplay = msg.sender === '300354198' ? 'Mukesh S.' : 'Aadi';
+    }
+    senderNameHtml = `<span class="message-sender-name">${escapeHtml(chanDisplay)}</span>`;
   }
 
   // 1. Photos
@@ -4389,20 +4413,22 @@ function appendMessageToChat(msg, isSent, prepend = false) {
 
   // 3. Call Details in Chat History (WhatsApp / iOS Style)
   let callHtml = '';
-  if (msg.call) {
-    const isMissed = msg.call.status === 'missed';
-    const isDeclined = msg.call.status === 'declined';
-    const durText = msg.call.duration > 0 ? formatAudioDuration(msg.call.duration) : (isMissed ? 'Missed' : 'Declined');
+  const isLegacyCallText = msg.text && (msg.text.includes('📞 Voice call') || msg.text.includes('Missed call') || msg.text.includes('Voice call •'));
+  if (msg.call || isLegacyCallText) {
+    const isMissed = (msg.call && msg.call.status === 'missed') || (msg.text && msg.text.toLowerCase().includes('missed'));
+    const isDeclined = msg.call && msg.call.status === 'declined';
+    const durText = (msg.call && msg.call.duration > 0) ? formatAudioDuration(msg.call.duration) : (msg.text && msg.text.includes('•') ? msg.text.split('•')[1].trim() : (isMissed ? 'Missed' : 'Completed'));
     const icon = isMissed ? '📞' : (isDeclined ? '📵' : '📞');
     const title = isMissed ? 'Missed Voice Call' : (isDeclined ? 'Declined Call' : 'Voice Call');
+    const partnerToCall = isSent ? (state.currentChatTarget || '') : msg.sender;
     callHtml = `
-      <div class="call-history-card ${msg.call.status}">
+      <div class="call-history-card ${isMissed ? 'missed' : 'completed'}">
         <div class="call-icon-circle ${isMissed ? 'missed' : 'success'}">${icon}</div>
         <div class="call-info">
           <div class="call-title">${title}</div>
           <div class="call-subtitle">${durText} • ${formatTime(msg.timestamp)}</div>
         </div>
-        <button class="btn-call-back" type="button" data-partner="${isSent ? (state.currentChatTarget || '') : msg.sender}" title="Call Back">Call back</button>
+        <button class="btn-call-back" type="button" data-partner="${escapeHtml(partnerToCall)}" title="Call Back">Call back</button>
       </div>
     `;
   }
@@ -4563,7 +4589,7 @@ function appendMessageToChat(msg, isSent, prepend = false) {
 
   let textHtml = '';
   let otpChipHtml = '';
-  if (msg.text) {
+  if (msg.text && !isLegacyCallText) {
     textHtml = `<div class="message-text">${escapeHtml(msg.text)}</div>`;
     // Detect 4-8 digit OTP verification codes or student numbers
     const otpMatch = msg.text.match(/\b\d{4,8}\b/);
@@ -4974,6 +5000,20 @@ function showReactionPopover(bubbleEl, event, msg) {
 
   reactionPopover.classList.remove('hidden');
 
+  // Toggle Delete option if sent by current user within last 15 minutes
+  const popoverBtnDelete = document.getElementById('popover-btn-delete');
+  if (popoverBtnDelete) {
+    const myUser = (state.currentUser && state.currentUser.username || '').toLowerCase();
+    const msgSender = (msg.sender || '').toLowerCase().replace(/^@/, '');
+    const isMine = (msgSender === myUser || (myUser === 'mukesh' && msgSender === '300354198') || (myUser === '300354198' && msgSender === 'mukesh'));
+    const isRecent = msg.timestamp && (Date.now() - msg.timestamp) <= 15 * 60 * 1000;
+    if (isMine && isRecent) {
+      popoverBtnDelete.classList.remove('hidden');
+    } else {
+      popoverBtnDelete.classList.add('hidden');
+    }
+  }
+
   const popoverWidth = 330;
   const topPos = (rect.top - containerRect.top) + el.messagesContainer.scrollTop - 52;
   const leftPos = Math.max(10, Math.min(containerRect.width - popoverWidth - 10, (rect.left - containerRect.left) + (rect.width / 2) - (popoverWidth / 2)));
@@ -5055,6 +5095,60 @@ if (popoverBtnPin) {
     }
     hideReactionPopover();
   });
+}
+
+const popoverBtnDelete = document.getElementById('popover-btn-delete');
+if (popoverBtnDelete) {
+  popoverBtnDelete.addEventListener('click', async (e) => {
+    e.stopPropagation();
+    if (activeReactionMsg) {
+      const targetId = activeReactionMsg.id;
+      hideReactionPopover();
+      if (confirm('Delete this message for everyone?')) {
+        await deleteMessage(targetId);
+      }
+    } else {
+      hideReactionPopover();
+    }
+  });
+}
+
+async function deleteMessage(messageId) {
+  if (!state.currentUser || !messageId) return;
+  try {
+    const res = await fetch('/api/messages/delete', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        messageId,
+        username: state.currentUser.username
+      })
+    });
+    const data = await res.json();
+    if (data.success) {
+      removeMessageFromUI(messageId);
+      showToast('Message deleted', '🗑️');
+    } else {
+      showToast(data.error || 'Failed to delete message', '⚠️');
+    }
+  } catch (err) {
+    showToast('Failed to delete message', '⚠️');
+  }
+}
+
+function removeMessageFromUI(messageId) {
+  const elMsg = document.querySelector(`.message-bubble-wrapper[data-msg-id="${messageId}"], .message-bubble[data-msg-id="${messageId}"]`);
+  if (elMsg) {
+    elMsg.style.transition = 'opacity 0.25s ease, transform 0.25s ease';
+    elMsg.style.opacity = '0';
+    elMsg.style.transform = 'scale(0.85)';
+    setTimeout(() => {
+      elMsg.remove();
+    }, 260);
+  }
+  if (state.renderedMsgIds) {
+    state.renderedMsgIds.delete(messageId);
+  }
 }
 
 // Click outside reaction popover to close
