@@ -4181,7 +4181,9 @@ async function fetchAndRenderChatMessages(isInitial = false) {
 
     const res = await fetch(url);
     if (!res.ok) {
-      if (el.offlineChatBanner) el.offlineChatBanner.classList.remove('hidden');
+      if (!navigator.onLine && el.offlineChatBanner) {
+        el.offlineChatBanner.classList.remove('hidden');
+      }
       return;
     }
 
@@ -4261,7 +4263,9 @@ async function fetchAndRenderChatMessages(isInitial = false) {
     }
   } catch (err) {
     console.error('Chat sync error:', err);
-    if (el.offlineChatBanner) el.offlineChatBanner.classList.remove('hidden');
+    if (!navigator.onLine && el.offlineChatBanner) {
+      el.offlineChatBanner.classList.remove('hidden');
+    }
     const cached = loadFromOfflineCache(offlineKey);
     if (cached && Array.isArray(cached) && isInitial && state.renderedMsgIds.size === 0) {
       el.messagesContainer.innerHTML = '';

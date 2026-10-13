@@ -2054,6 +2054,14 @@ function migrateLegacyChatIds() {
     for (const [oldId, newId] of legacyPairs) {
       db.prepare('UPDATE messages SET chat_id = ? WHERE chat_id = ?').run(newId, oldId);
     }
+    // Consolidate any split channels for Aadi and Mukesh (e.g. 300363794_mukesh into 300354198_300363794)
+    db.prepare("UPDATE messages SET chat_id = '300354198_300363794' WHERE chat_id = '300363794_mukesh' OR chat_id = 'mukesh_300363794'").run();
+
+    // Ensure bilateral friendship between Aadi (300363794) and both 300354198 and mukesh
+    const now = Date.now();
+    try { db.prepare("INSERT OR IGNORE INTO friends (user1, user2, created_at) VALUES ('300354198', '300363794', ?)").run(now); } catch(_) {}
+    try { db.prepare("INSERT OR IGNORE INTO friends (user1, user2, created_at) VALUES ('mukesh', '300363794', ?)").run(now); } catch(_) {}
+
     // Clean up any self-friendships
     db.prepare('DELETE FROM friends WHERE user1 = user2').run();
   } catch (_) {}
@@ -2081,6 +2089,13 @@ function backfillChatParticipantsAndAliases() {
     const allUsers = db.prepare('SELECT username, oc_id, email FROM users').all();
     for (const u of allUsers) {
       if (u.username) {
+        // Do not overwrite mukesh / mukesh_sarwa canonical mapping to 300354198
+        if (u.username === 'mukesh' || u.username === 'mukesh_sarwa') {
+          DB.setAlias(u.username, '300354198');
+          if (u.oc_id) DB.setAlias(u.oc_id, '300354198');
+          if (u.email) DB.setAlias(u.email, '300354198');
+          continue;
+        }
         DB.setAlias(u.username, u.username);
         if (u.oc_id) DB.setAlias(u.oc_id, u.username);
         if (u.email) DB.setAlias(u.email, u.username);
