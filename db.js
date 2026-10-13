@@ -744,6 +744,9 @@ const DB = {
       cleanCampus,
       hasOnboarded
     );
+    try {
+      autoJoinCampusLounges(cleanUsername);
+    } catch (_) {}
     return this.getUser(cleanUsername);
   },
 
@@ -2120,14 +2123,91 @@ function backfillChatParticipantsAndAliases() {
   }
 }
 
+// Seed & Auto-Join Default Campus Lounges for All Okanagan College Students
+function ensureDefaultCampusGroups() {
+  const defaultGroups = [
+    {
+      id: 'grp_kelowna_general',
+      name: '🎓 Kelowna General Lounge',
+      description: 'Official Okanagan College community lounge for all students.',
+      avatarColor: '#007AFF',
+      avatarImage: null,
+      welcomeMsg: 'Welcome to the Kelowna General Lounge! Connect with classmates across campus.'
+    },
+    {
+      id: 'grp_study_exchange',
+      name: '📚 Study & Course Exchange',
+      description: 'Find study buddies, discuss courses, and share study tips at KLO.',
+      avatarColor: '#34C759',
+      avatarImage: null,
+      welcomeMsg: 'Welcome to the Study Lounge! Connect with study partners and share resources.'
+    },
+    {
+      id: 'grp_campus_safety',
+      name: '🛡️ Campus Safety & Walk-Safe',
+      description: 'Campus security updates, walk-safe requests, and emergency assistance.',
+      avatarColor: '#FF9500',
+      avatarImage: null,
+      welcomeMsg: 'Campus Safety Lounge: 24/7 Security hotline: 250-762-5445 ext 4676.'
+    }
+  ];
+
+  try {
+    for (const g of defaultGroups) {
+      const existing = DB.getGroup(g.id);
+      if (!existing) {
+        stmts.createGroup.run(g.id, g.name, g.description, g.avatarColor, g.avatarImage, 'campusbot', Date.now());
+        DB.saveMessage({
+          id: 'msg_welcome_' + g.id,
+          chatId: 'group_' + g.id,
+          sender: 'campusbot',
+          displayName: 'CampusBot 🎓',
+          text: g.welcomeMsg,
+          timestamp: Date.now() - 3600000,
+          status: 'read'
+        });
+      }
+    }
+
+    // Auto-enroll all registered active users into the default groups
+    const users = db.prepare('SELECT username FROM users WHERE is_demo = 0').all();
+    for (const u of users) {
+      if (u.username) {
+        for (const g of defaultGroups) {
+          try {
+            stmts.addGroupMember.run(g.id, u.username.toLowerCase(), 'member', Date.now());
+          } catch (_) {}
+        }
+      }
+    }
+  } catch (err) {
+    console.error('Warning in ensureDefaultCampusGroups:', err.message);
+  }
+}
+
+// Helper to auto-join a single user to default campus groups upon sign-up
+function autoJoinCampusLounges(username) {
+  if (!username) return;
+  const clean = username.trim().toLowerCase().replace(/^@/, '');
+  const groupIds = ['grp_kelowna_general', 'grp_study_exchange', 'grp_campus_safety'];
+  for (const gid of groupIds) {
+    try {
+      stmts.addGroupMember.run(gid, clean, 'member', Date.now());
+    } catch (_) {}
+  }
+}
+
 // Run Migration, Seeding & Relational Participant Backfill
 migrateFromLegacyJson();
 seedDemoStudents();
 migrateLegacyChatIds();
 backfillChatParticipantsAndAliases();
+ensureDefaultCampusGroups();
 
 module.exports = {
   DB,
-  getDeterministicChatId
+  getDeterministicChatId,
+  autoJoinCampusLounges
 };
+
 
