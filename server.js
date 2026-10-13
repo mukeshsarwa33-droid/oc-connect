@@ -831,7 +831,7 @@ const server = http.createServer(async (req, res) => {
 
       // 4. User Me Profile Check
       if (pathname === '/api/users/me' && req.method === 'GET') {
-        const username = (parsedUrl.searchParams.get('username') || '').trim().toLowerCase();
+        const username = (parsedUrl.searchParams.get('username') || parsedUrl.searchParams.get('user') || parsedUrl.searchParams.get('me') || '').trim().toLowerCase();
         const resolved = resolveUsername(username);
 
         if (!resolved) {
@@ -887,7 +887,7 @@ const server = http.createServer(async (req, res) => {
       }
 
       // 5B. Campus Directory (High Performance - Supports 10,000+ Students)
-      if (pathname === '/api/users/all' && req.method === 'GET') {
+      if ((pathname === '/api/users/all' || pathname === '/api/users') && req.method === 'GET') {
         const currentUsername = (parsedUrl.searchParams.get('me') || '').trim().toLowerCase();
         const resolvedMe = resolveUsername(currentUsername);
         const filterQuery = (parsedUrl.searchParams.get('query') || '').trim().toLowerCase();
@@ -1389,7 +1389,7 @@ const server = http.createServer(async (req, res) => {
       }
 
       // 11. Messages: Send Message (Supports 1-on-1, Channels, and WhatsApp-Style Groups)
-      if (pathname === '/api/messages/send' && req.method === 'POST') {
+      if ((pathname === '/api/messages/send' || pathname === '/api/messages') && req.method === 'POST') {
         const { sender, recipient, text, image, file, voice, studyCard, channel, groupId, replyTo, id } = await parseJsonBody(req);
         const resolvedSender = resolveUsername(sender);
         const cleanText = (text || '').trim();
@@ -1663,8 +1663,8 @@ const server = http.createServer(async (req, res) => {
 
       // 11a-2b. Delete Message (Recall message within 15 minutes)
       if (pathname === '/api/messages/delete' && req.method === 'POST') {
-        const { messageId, username } = await parseJsonBody(req);
-        const resolvedUser = resolveUsername(username);
+        const { messageId, username, requesterId, userId } = await parseJsonBody(req);
+        const resolvedUser = resolveUsername(username || requesterId || userId);
 
         if (!resolvedUser || !messageId) {
           res.writeHead(400);
@@ -3567,6 +3567,7 @@ const server = http.createServer(async (req, res) => {
         res.end(compressed);
       });
     } else {
+      headers['Content-Length'] = content.length;
       res.writeHead(200, headers);
       res.end(content);
     }
