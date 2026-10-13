@@ -215,6 +215,26 @@ const LocalDeviceStore = {
     }
   },
 
+  async deleteMessage(messageId) {
+    if (!messageId) return;
+    for (const [normKey, list] of this.memCache.messages.entries()) {
+      const idx = list.findIndex(m => m.id === messageId);
+      if (idx >= 0) {
+        list.splice(idx, 1);
+        try {
+          localStorage.setItem(`oc_msg_${normKey}`, JSON.stringify(list.slice(-150)));
+        } catch (_) {}
+      }
+    }
+    if (!this.db) await this.init();
+    if (this.db) {
+      try {
+        const tx = this.db.transaction('messages', 'readwrite');
+        tx.objectStore('messages').delete(messageId);
+      } catch (_) {}
+    }
+  },
+
   async getMessages(chatKey) {
     if (!chatKey) return [];
     const normKey = String(chatKey).trim().toLowerCase();
@@ -589,7 +609,7 @@ const el = {
   btnChatMediaHub: document.getElementById('btn-chat-media-hub'),
   inChatSearchBar: document.getElementById('in-chat-search-bar'),
   inChatSearchInput: document.getElementById('in-chat-search-input'),
-  chatSearchCount: document.getElementById('chat-search-count'),
+  chatSearchCount: document.getElementById('chat-search-count') || document.getElementById('in-chat-search-count'),
   btnChatSearchPrev: document.getElementById('btn-chat-search-prev'),
   btnChatSearchNext: document.getElementById('btn-chat-search-next'),
   btnCloseChatSearch: document.getElementById('btn-close-chat-search'),
@@ -5004,10 +5024,12 @@ function showReactionPopover(bubbleEl, event, msg) {
   const popoverBtnDelete = document.getElementById('popover-btn-delete');
   if (popoverBtnDelete) {
     const myUser = (state.currentUser && state.currentUser.username || '').toLowerCase();
+    const isAdmin = Boolean(state.currentUser && (state.currentUser.isAdmin || state.currentUser.role === 'admin' || state.currentUser.username === 'admin'));
     const msgSender = (msg.sender || '').toLowerCase().replace(/^@/, '');
     const isMine = (msgSender === myUser || (myUser === 'mukesh' && msgSender === '300354198') || (myUser === '300354198' && msgSender === 'mukesh'));
-    const isRecent = msg.timestamp && (Date.now() - msg.timestamp) <= 15 * 60 * 1000;
-    if (isMine && isRecent) {
+    const msgTime = typeof msg.timestamp === 'number' ? msg.timestamp : (new Date(msg.timestamp).getTime() || 0);
+    const isRecent = msgTime > 0 && (Date.now() - msgTime) <= 15 * 60 * 1000;
+    if ((isMine && isRecent) || isAdmin) {
       popoverBtnDelete.classList.remove('hidden');
     } else {
       popoverBtnDelete.classList.add('hidden');
@@ -5149,6 +5171,9 @@ function removeMessageFromUI(messageId) {
   if (state.renderedMsgIds) {
     state.renderedMsgIds.delete(messageId);
   }
+  try {
+    LocalDeviceStore.deleteMessage(messageId);
+  } catch (_) {}
 }
 
 // Click outside reaction popover to close

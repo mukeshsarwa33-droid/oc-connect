@@ -1401,8 +1401,11 @@ const DB = {
     const msgSender = (msg.sender || '').trim().toLowerCase().replace(/^@/, '');
     const canonicalSender = this.getCanonicalUsername ? (this.getCanonicalUsername(msgSender) || msgSender) : msgSender;
 
-    // Allow deletion if sender matches
-    if (canonical !== canonicalSender && cleanUser !== msgSender) {
+    // Allow deletion if sender matches OR user is campus admin
+    const userRow = this.findUser(cleanUser);
+    const isAdmin = Boolean(userRow && (userRow.isAdmin || userRow.role === 'admin' || userRow.username === 'admin'));
+
+    if (!isAdmin && canonical !== canonicalSender && cleanUser !== msgSender) {
       return false;
     }
 
