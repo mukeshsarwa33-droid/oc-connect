@@ -6,6 +6,7 @@ const https = require('https');
 const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
+const zlib = require('zlib');
 const { DB, getDeterministicChatId } = require('./db.js');
 const { saveBase64Media, streamMediaFile } = require('./storage.js');
 
@@ -3497,9 +3498,28 @@ const server = http.createServer(async (req, res) => {
     if (safePath === '/sw.js') {
       headers['Service-Worker-Allowed'] = '/';
       headers['Cache-Control'] = 'no-cache, no-store, must-revalidate';
+    } else {
+      headers['Cache-Control'] = 'public, max-age=3600';
     }
-    res.writeHead(200, headers);
-    res.end(content);
+
+    const acceptEncoding = req.headers['accept-encoding'] || '';
+    const compressible = ext === '.js' || ext === '.css' || ext === '.html' || ext === '.json';
+
+    if (compressible && acceptEncoding.includes('gzip')) {
+      zlib.gzip(content, (zlibErr, compressed) => {
+        if (zlibErr || !compressed) {
+          res.writeHead(200, headers);
+          return res.end(content);
+        }
+        headers['Content-Encoding'] = 'gzip';
+        headers['Content-Length'] = compressed.length;
+        res.writeHead(200, headers);
+        res.end(compressed);
+      });
+    } else {
+      res.writeHead(200, headers);
+      res.end(content);
+    }
   });
   } catch (fatalRouteErr) {
     handleServerError(fatalRouteErr, req, res);
