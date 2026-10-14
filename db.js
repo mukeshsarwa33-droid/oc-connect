@@ -2308,6 +2308,33 @@ function ensureDefaultCampusGroups() {
         }
       }
     }
+    // Ensure Funding Proposal Group
+    const existingFunding = DB.getGroup('grp_funding_proposal');
+    if (!existingFunding) {
+      stmts.createGroup.run(
+        'grp_funding_proposal',
+        '💼 Funding Proposal',
+        'Okanagan College student project funding proposals, grants, and venture collaboration.',
+        '#128C7E',
+        null,
+        '300354198',
+        Date.now()
+      );
+      try { stmts.addGroupMember.run('grp_funding_proposal', '300354198', 'admin', Date.now()); } catch (_) {}
+      const fundingMembers = ['300363794', 'jeenusarwa', 'sharankaur', 'lucas_smi_oc'];
+      for (const m of fundingMembers) {
+        try { stmts.addGroupMember.run('grp_funding_proposal', m, 'member', Date.now()); } catch (_) {}
+      }
+      DB.saveMessage({
+        id: 'msg_welcome_funding_proposal',
+        chatId: 'group_grp_funding_proposal',
+        sender: 'System',
+        displayName: 'OC System',
+        text: '✨ Mukesh S. created group "💼 Funding Proposal"',
+        timestamp: Date.now() - 3600000,
+        status: 'read'
+      });
+    }
   } catch (err) {
     console.error('Warning in ensureDefaultCampusGroups:', err.message);
   }
