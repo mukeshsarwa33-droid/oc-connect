@@ -952,10 +952,14 @@ const DB = {
       }
 
       // 1. Rename user in-place in users table (preserves oc_id, profile, and all student columns)
+      // Renamed users are always real human students (is_demo = 0).
+      // If the old account had a demo oc_id (e.g. 300100000), assign a real unique student OC ID.
       db.prepare(`
         UPDATE users 
         SET username = ?, 
-            display_name = COALESCE(?, display_name) 
+            display_name = COALESCE(?, display_name),
+            is_demo = 0,
+            oc_id = CASE WHEN oc_id LIKE '3001000%' THEN ('3003' || substr(hex(randomblob(3)), 1, 5)) ELSE oc_id END
         WHERE username = ?
       `).run(newClean, newDisplayName || null, oldClean);
 
@@ -1012,7 +1016,11 @@ const DB = {
       try { db.prepare('UPDATE calls SET caller = ? WHERE caller = ?').run(newClean, oldClean); } catch(_) {}
       try { db.prepare('UPDATE calls SET callee = ? WHERE callee = ?').run(newClean, oldClean); } catch(_) {}
       try { db.prepare('UPDATE chat_participants SET username = ? WHERE username = ?').run(newClean, oldClean); } catch(_) {}
-      try { this.setAlias(oldClean, newClean); } catch(_) {}
+
+      // Only alias oldClean to newClean if oldClean was a real user (never alias demo accounts)
+      if (!user.isDemo) {
+        try { this.setAlias(oldClean, newClean); } catch(_) {}
+      }
       try { this.setAlias(newClean, newClean); } catch(_) {}
 
       db.exec('COMMIT;');
@@ -2095,6 +2103,69 @@ function migrateLegacyChatIds() {
     // Clean up raw numeric display names in user record and historic messages
     db.prepare("UPDATE users SET display_name = 'Mukesh S.' WHERE username = '300354198' AND (display_name = '300354198' OR display_name IS NULL OR display_name = '')").run();
     db.prepare("UPDATE messages SET display_name = 'Mukesh S.' WHERE sender = '300354198' AND display_name = '300354198'").run();
+
+    // Disentangle Jeenu Sarwa from Demo Lucas
+    try {
+      // 1. Ensure any non-Lucas user holding demo oc_id 300100000 is given a unique real OC ID first
+      try { db.prepare("UPDATE users SET oc_id = '300363795' WHERE username = 'jeenusarwa' AND (oc_id = '300100000' OR oc_id IS NULL OR oc_id = '')").run(); } catch (_) {}
+      try { db.prepare("UPDATE users SET oc_id = ('3003' || substr(hex(randomblob(3)), 1, 5)) WHERE username != 'lucas_smi_oc' AND oc_id = '300100000'").run(); } catch (_) {}
+
+      const jeenu = db.prepare("SELECT * FROM users WHERE username = 'jeenusarwa'").get();
+      if (jeenu) {
+        db.prepare(`
+          UPDATE users 
+          SET display_name = 'Jeenu',
+              is_demo = 0,
+              oc_id = '300363795',
+              avatar_image = NULL,
+              avatar_color = '#E91E63'
+          WHERE username = 'jeenusarwa'
+        `).run();
+
+        // Clear any erroneous alias linking lucas to jeenusarwa
+        db.prepare("DELETE FROM user_aliases WHERE (alias = 'lucas' OR alias = 'lucas_smi_oc') AND canonical_username = 'jeenusarwa'").run();
+        db.prepare("INSERT OR REPLACE INTO user_aliases (alias, canonical_username) VALUES ('jeenusarwa', 'jeenusarwa')").run();
+
+        // Move all real messages between Mukesh (300354198) and jeenusarwa into their dedicated chat ID
+        const jeenuChatId = getDeterministicChatId('300354198', 'jeenusarwa'); // '300354198_jeenusarwa'
+        
+        // Purge simulated bot auto-replies (msg_reply_...) and welcome bot messages from Jeenu's chat
+        db.prepare("DELETE FROM messages WHERE chat_id = '300354198_lucas_smi_oc' AND (id LIKE 'msg_reply_%' OR id LIKE 'msg_welcome_%')").run();
+        db.prepare("DELETE FROM messages WHERE chat_id = ? AND (id LIKE 'msg_reply_%' OR id LIKE 'msg_welcome_%')").run(jeenuChatId);
+        
+        // Move remaining messages to the proper Jeenu chat
+        db.prepare("UPDATE messages SET chat_id = ? WHERE chat_id = '300354198_lucas_smi_oc'").run(jeenuChatId);
+
+        // Update display name on historic messages sent by jeenusarwa
+        db.prepare("UPDATE messages SET display_name = 'Jeenu' WHERE sender = 'jeenusarwa'").run();
+
+        // Update chat_participants
+        db.prepare("DELETE FROM chat_participants WHERE chat_id = '300354198_lucas_smi_oc'").run();
+        db.prepare("INSERT OR REPLACE INTO chat_participants (chat_id, username, last_active) VALUES (?, '300354198', ?)").run(jeenuChatId, Date.now());
+        db.prepare("INSERT OR REPLACE INTO chat_participants (chat_id, username, last_active) VALUES (?, 'jeenusarwa', ?)").run(jeenuChatId, Date.now());
+
+        // Ensure bilateral friendship between Mukesh and Jeenu
+        db.prepare("INSERT OR IGNORE INTO friends (user1, user2, created_at) VALUES ('300354198', 'jeenusarwa', ?)").run(Date.now());
+      }
+
+      // Re-create or restore clean demo Lucas S. as an independent demo student
+      db.prepare(`
+        INSERT INTO users (
+          username, oc_id, display_name, major, campus, bio, email, phone, avatar_color, avatar_image, online, last_seen, created_at, is_demo, is_trusted
+        ) VALUES (
+          'lucas_smi_oc', '300100000', 'Lucas S.', 'CIS Year 2 • KLO', 'Kelowna Campus (KLO)', '', NULL, NULL, '#34B7F1', 'https://api.dicebear.com/7.x/bottts/svg?seed=lucas_smi_oc', 1, ?, ?, 1, 0
+        )
+        ON CONFLICT(username) DO UPDATE SET
+          display_name = 'Lucas S.',
+          is_demo = 1,
+          oc_id = '300100000',
+          avatar_image = 'https://api.dicebear.com/7.x/bottts/svg?seed=lucas_smi_oc',
+          avatar_color = '#34B7F1'
+      `).run(Date.now(), Date.now());
+
+      db.prepare("INSERT OR REPLACE INTO user_aliases (alias, canonical_username) VALUES ('lucas', 'lucas_smi_oc')").run();
+      db.prepare("INSERT OR REPLACE INTO user_aliases (alias, canonical_username) VALUES ('lucas_smi_oc', 'lucas_smi_oc')").run();
+    } catch (_) {}
   } catch (_) {}
 }
 

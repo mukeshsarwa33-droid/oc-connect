@@ -1027,9 +1027,10 @@ const server = http.createServer(async (req, res) => {
         broadcastToUser(resolvedTo, 'friend_request', newReq);
         broadcastToUser(resolvedTo, 'friend_request_received', newReq);
 
-        // Simulated auto-accept for demo students
+        // Simulated auto-accept for demo students ONLY (never real students)
         const targetUser = DB.getUser(resolvedTo);
-        if (targetUser && targetUser.isDemo) {
+        const isProtectedRealTarget = ['jeenusarwa', 'mukesh', 'mukesh_sarwa', '300354198', '300363794', 'aadi', 'aadi_test', 'sharankaur'].includes((resolvedTo || '').toLowerCase());
+        if (targetUser && targetUser.isDemo && !isProtectedRealTarget) {
           setTimeout(() => {
             DB.removeFriendRequest(reqId);
             DB.addFriend(resolvedFrom, resolvedTo);
@@ -1557,9 +1558,10 @@ const server = http.createServer(async (req, res) => {
           });
         }
 
-        // Simulated reply for demo users
+        // Simulated reply for demo users ONLY (never real students like jeenusarwa, mukesh, etc.)
         const recipientUser = DB.getUser(resolvedRecipient);
-        if (recipientUser && recipientUser.isDemo) {
+        const isProtectedRealStudent = ['jeenusarwa', 'mukesh', 'mukesh_sarwa', '300354198', '300363794', 'aadi', 'aadi_test', 'sharankaur'].includes((resolvedRecipient || '').toLowerCase());
+        if (recipientUser && recipientUser.isDemo && !isProtectedRealStudent) {
           setTimeout(() => {
             const replies = [
               "That's awesome! How are your classes going?",
@@ -2619,9 +2621,10 @@ const server = http.createServer(async (req, res) => {
           callerAvatar: callerUser.avatarColor || '#075E54'
         });
 
-        // Simulated accept for demo users
+        // Simulated accept for demo users ONLY (never real students)
         const recipientUser = DB.getUser(resolvedRecipient) || DB.findUser(resolvedRecipient);
-        if (recipientUser && recipientUser.isDemo) {
+        const isProtectedRealVoiceUser = ['jeenusarwa', 'mukesh', 'mukesh_sarwa', '300354198', '300363794', 'aadi', 'aadi_test', 'sharankaur'].includes((resolvedRecipient || '').toLowerCase());
+        if (recipientUser && recipientUser.isDemo && !isProtectedRealVoiceUser) {
           setTimeout(() => {
             const currentCall = activeCalls.get(callId);
             if (currentCall && currentCall.status === 'ringing') {
