@@ -840,6 +840,11 @@ const server = http.createServer(async (req, res) => {
         }
 
         const user = DB.getUser(resolved);
+        if (!user) {
+          res.writeHead(404);
+          return res.end(JSON.stringify({ error: 'User not found' }));
+        }
+
         return res.end(JSON.stringify({
           user: {
             ocId: user.ocId,
