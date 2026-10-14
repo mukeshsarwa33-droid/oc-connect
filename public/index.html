@@ -1182,9 +1182,15 @@
           <div class="onboarding-avatar-preview-wrap">
             <div id="onboarding-avatar-preview" class="avatar-circle onboarding-avatar-circle">U</div>
             <button type="button" id="btn-onboarding-roll-avatar" class="onboarding-dice-btn" title="Roll Random Avatar">🎲</button>
+            <input type="file" id="onboarding-avatar-file-input" accept="image/*" class="hidden" style="display:none;">
+          </div>
+          <div style="margin-top:8px;display:flex;justify-content:center;">
+            <button type="button" id="btn-onboarding-upload-photo" class="btn-dicebear-pill" style="background:rgba(0,122,255,0.12);color:#007AFF;border:1px solid rgba(0,122,255,0.3);font-size:12px;font-weight:600;padding:6px 14px;">
+              📷 Upload Real Photo
+            </button>
           </div>
           <div class="onboarding-avatar-styles-bar">
-            <span class="onboarding-section-subtitle">Pick Avatar Style:</span>
+            <span class="onboarding-section-subtitle">Or Pick Avatar Style:</span>
             <div class="onboarding-styles-grid">
               <button type="button" class="onboarding-style-chip active" data-style="bottts">🤖 Robots</button>
               <button type="button" class="onboarding-style-chip" data-style="avataaars">🧑 Casual</button>
@@ -1264,11 +1270,14 @@
           </div>
           
           <div class="profile-avatar-action-bar">
-            <button id="btn-generate-avatar" class="btn-dicebear-pill" title="Generate creative avatar (Dicebear API)">
-              <span>🎲 Generate Avatar</span>
+            <button id="btn-upload-photo-pill" class="btn-dicebear-pill" style="background:rgba(0,122,255,0.12);color:#007AFF;border:1px solid rgba(0,122,255,0.3);font-weight:700;" title="Upload custom photo from camera or library">
+              <span>📷 Add / Change Photo</span>
             </button>
-            <button id="btn-share-my-profile" class="btn-dicebear-pill" style="background:rgba(0,122,255,0.12);color:#007AFF;border:1px solid rgba(0,122,255,0.3);" title="Share student profile via Web Share API">
-              <span>📤 Share Profile</span>
+            <button id="btn-generate-avatar" class="btn-dicebear-pill" title="Generate creative avatar (Dicebear API)">
+              <span>🎲 Roll Avatar</span>
+            </button>
+            <button id="btn-share-my-profile" class="btn-dicebear-pill" style="background:rgba(52,199,89,0.12);color:#34C759;border:1px solid rgba(52,199,89,0.3);" title="Share student profile via Web Share API">
+              <span>📤 Share</span>
             </button>
             <div id="settings-remove-photo-btn-wrap" class="hidden">
               <button id="btn-remove-avatar" class="btn-pill-subtle-danger">Remove</button>

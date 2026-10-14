@@ -1759,6 +1759,8 @@ function checkAndTriggerOnboarding() {
   const styleChips = document.querySelectorAll('.onboarding-style-chip');
   const diceBtn = document.getElementById('btn-onboarding-roll-avatar');
   const submitBtn = document.getElementById('btn-submit-onboarding');
+  const onboardingPhotoBtn = document.getElementById('btn-onboarding-upload-photo');
+  const onboardingPhotoInput = document.getElementById('onboarding-avatar-file-input');
 
   let chosenStyle = 'bottts';
   let chosenSeed = username || 'student';
@@ -1779,6 +1781,31 @@ function checkAndTriggerOnboarding() {
         chosenAvatarUrl
       );
     }
+  }
+
+  if (onboardingPhotoBtn && onboardingPhotoInput) {
+    onboardingPhotoBtn.onclick = () => onboardingPhotoInput.click();
+    onboardingPhotoInput.onchange = async (e) => {
+      const file = e.target.files[0];
+      if (!file) return;
+      onboardingPhotoInput.value = '';
+      showToast('Processing photo...', '⏳');
+      try {
+        const compressed = await compressAvatarImage(file, 400, 0.85);
+        chosenAvatarUrl = compressed;
+        if (avatarPreview) {
+          renderAvatar(
+            avatarPreview,
+            ((nameInput && nameInput.value) || username || 'U').charAt(0).toUpperCase(),
+            state.currentUser.avatarColor,
+            chosenAvatarUrl
+          );
+        }
+        showToast('Photo ready! 📷', '✅');
+      } catch (err) {
+        showToast('Error processing image: ' + err.message, '⚠️');
+      }
+    };
   }
 
   styleChips.forEach(chip => {
@@ -7141,8 +7168,12 @@ async function openContactProfile(username) {
 
   el.profileModalName.textContent = displayName;
   el.profileModalHandle.textContent = `@${cleanTarget}`;
-  el.profileModalAvatar.textContent = displayName.charAt(0).toUpperCase();
-  el.profileModalAvatar.style.backgroundColor = avatarColor;
+  renderAvatar(
+    el.profileModalAvatar,
+    displayName.charAt(0).toUpperCase(),
+    avatarColor,
+    user?.avatarImage || null
+  );
 
   el.profileModalStatus.textContent = isOnline ? '● Online now' : 'Last seen recently';
   el.profileModalStatus.style.color = isOnline ? 'var(--accent-green)' : 'var(--text-light)';
@@ -8465,6 +8496,12 @@ if (elSettings.modal) {
 // Open file picker for profile picture
 if (elSettings.btnChangeAvatar) {
   elSettings.btnChangeAvatar.addEventListener('click', () => {
+    elSettings.avatarFileInput && elSettings.avatarFileInput.click();
+  });
+}
+const btnUploadPhotoPill = document.getElementById('btn-upload-photo-pill');
+if (btnUploadPhotoPill) {
+  btnUploadPhotoPill.addEventListener('click', () => {
     elSettings.avatarFileInput && elSettings.avatarFileInput.click();
   });
 }
