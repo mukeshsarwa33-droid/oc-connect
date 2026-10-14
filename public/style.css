@@ -3969,6 +3969,8 @@ button, .btn-send-ios, .chat-item, .nav-btn, .avatar-circle, .list-item {
 .tag-convert { background: rgba(255, 45, 85, 0.15); color: #FF2D55; }
 .tag-location { background: rgba(255, 149, 0, 0.15); color: #FF9500; }
 .tag-advice { background: rgba(0, 199, 190, 0.15); color: #00C7BE; }
+.tag-quote { background: rgba(245, 158, 11, 0.15); color: #D97706; }
+.tag-meet { background: rgba(16, 185, 129, 0.15); color: #059669; }
 
 .message-bubble.sent .tag-wiki { background: rgba(255, 255, 255, 0.25); color: #FFFFFF; }
 .message-bubble.sent .tag-book { background: rgba(255, 255, 255, 0.25); color: #FFFFFF; }
@@ -3978,6 +3980,8 @@ button, .btn-send-ios, .chat-item, .nav-btn, .avatar-circle, .list-item {
 .message-bubble.sent .tag-convert { background: rgba(255, 255, 255, 0.25); color: #FFFFFF; }
 .message-bubble.sent .tag-location { background: rgba(255, 255, 255, 0.25); color: #FFFFFF; }
 .message-bubble.sent .tag-advice { background: rgba(255, 255, 255, 0.25); color: #FFFFFF; }
+.message-bubble.sent .tag-quote { background: rgba(255, 255, 255, 0.25); color: #FFFFFF; }
+.message-bubble.sent .tag-meet { background: rgba(255, 255, 255, 0.25); color: #FFFFFF; }
 
 /* Study Tabs Navigation */
 .study-tabs-nav {
@@ -6952,6 +6956,61 @@ button:active {
   -webkit-line-clamp: 2;
   -webkit-box-orient: vertical;
   overflow: hidden;
+}
+
+/* GitHub Rich Repo Card */
+.github-repo-card {
+  border-left: 3px solid #2da44e !important;
+  background: rgba(0, 0, 0, 0.05);
+}
+[data-theme="dark"] .github-repo-card {
+  background: rgba(255, 255, 255, 0.08);
+  border-left-color: #3fb950 !important;
+}
+.github-repo-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 10px 4px;
+}
+.github-icon {
+  font-size: 16px;
+}
+.github-repo-name {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text-primary);
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.github-badge {
+  font-size: 10px;
+  background: rgba(45, 164, 78, 0.15);
+  color: #2da44e;
+  padding: 2px 5px;
+  border-radius: 4px;
+  font-weight: 600;
+}
+.github-desc {
+  padding: 0 10px 6px;
+  font-size: 11.5px;
+  color: var(--text-secondary);
+}
+.github-meta-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 10px 8px;
+}
+.github-tag {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
 }
 
 /* 4. Voice Note Waveform & Speed Toggle */

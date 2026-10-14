@@ -2903,7 +2903,7 @@ function updateInboxItemOptimistic(chatKey, message, isGroup = false, groupTitle
   else if (message.image) snippetText = '📷 Photo';
   else if (message.studyCard) {
     const sc = message.studyCard;
-    snippetText = sc.type === 'wiki' ? `📖 Wiki: ${sc.title}` : (sc.type === 'book' ? `📚 Book: ${sc.title}` : (sc.type === 'joke' ? '😂 Study Joke' : '🌤️ Campus Weather'));
+    snippetText = sc.type === 'wiki' ? `📖 Wiki: ${sc.title}` : (sc.type === 'book' ? `📚 Book: ${sc.title}` : (sc.type === 'joke' ? '😂 Study Joke' : (sc.type === 'quote' ? `✨ Quote: ${sc.quote}` : (sc.type === 'meet' ? `🎙️ Live Study Table` : '🌤️ Campus Weather'))));
   }
 
   const isMyMsg = state.currentUser && message.sender === state.currentUser.username;
@@ -3888,7 +3888,7 @@ function renderRecentChatsList(mergedList) {
           msgContent = '📎 ' + (item.lastMessage.file.name || 'File attachment');
         } else if (item.lastMessage.studyCard) {
           const sc = item.lastMessage.studyCard;
-          msgContent = sc.type === 'wiki' ? `📖 Wiki: ${sc.title}` : (sc.type === 'book' ? `📚 Book: ${sc.title}` : (sc.type === 'joke' ? '😂 Study Joke' : '🌤️ Campus Weather'));
+          msgContent = sc.type === 'wiki' ? `📖 Wiki: ${sc.title}` : (sc.type === 'book' ? `📚 Book: ${sc.title}` : (sc.type === 'joke' ? '😂 Study Joke' : (sc.type === 'quote' ? `✨ Quote: ${sc.quote}` : (sc.type === 'meet' ? `🎙️ Live Study Table` : '🌤️ Campus Weather'))));
         } else {
           msgContent = item.lastMessage.text || 'Photo';
         }
@@ -4342,6 +4342,26 @@ async function fetchLinkPreview(url, slotEl) {
 function renderLinkCard(data, slotEl, targetUrl) {
   if (!slotEl || !data) return;
   const href = data.url || targetUrl;
+
+  if (data.isGitHubRepo) {
+    slotEl.innerHTML = `
+      <a href="${escapeHtml(href)}" target="_blank" rel="noopener noreferrer" class="rich-link-card github-repo-card">
+        <div class="github-repo-header">
+          <span class="github-icon">🐙</span>
+          <span class="github-repo-name">${escapeHtml(data.title || '')}</span>
+          <span class="github-badge">GitHub</span>
+        </div>
+        ${data.description ? `<div class="rich-link-desc github-desc">${escapeHtml(data.description)}</div>` : ''}
+        <div class="github-meta-row">
+          <span class="github-tag github-lang">💻 ${escapeHtml(data.language || 'Code')}</span>
+          <span class="github-tag github-stars">⭐ ${Number(data.stars || 0).toLocaleString()}</span>
+          ${data.forks ? `<span class="github-tag github-forks">🍴 ${Number(data.forks).toLocaleString()}</span>` : ''}
+        </div>
+      </a>
+    `;
+    return;
+  }
+
   const imgHtml = data.image ? `<img src="${escapeHtml(data.image)}" class="rich-link-img" alt="Link Preview" loading="lazy" />` : '';
   const descHtml = data.description ? `<div class="rich-link-desc">${escapeHtml(data.description)}</div>` : '';
   slotEl.innerHTML = `
@@ -4608,6 +4628,37 @@ function appendMessageToChat(msg, isSent, prepend = false) {
           </div>
           <div class="study-card-body" style="font-size:13.5px;font-weight:500;line-height:1.4;">
             "${escapeHtml(sc.advice || '')}"
+          </div>
+        </div>
+      `;
+    } else if (sc.type === 'quote') {
+      studyCardHtml = `
+        <div class="study-card-bubble">
+          <div class="study-card-header">
+            <span class="study-card-tag tag-quote">Daily Inspiration</span>
+            <span>✨</span>
+          </div>
+          <div class="study-card-body" style="font-size:13.5px;font-style:italic;line-height:1.5;">
+            "${escapeHtml(sc.quote || '')}"
+          </div>
+          <div style="margin-top:6px;font-size:12px;font-weight:600;opacity:0.85;text-align:right;">— ${escapeHtml(sc.author || 'Campus Motivation')}</div>
+        </div>
+      `;
+    } else if (sc.type === 'meet') {
+      studyCardHtml = `
+        <div class="study-card-bubble">
+          <div class="study-card-header">
+            <span class="study-card-tag tag-meet">Live Audio / Video Table</span>
+            <span>🎙️</span>
+          </div>
+          <div class="study-card-title">${escapeHtml(sc.roomName || 'Campus Study Table')}</div>
+          <div class="study-card-body" style="font-size:12.5px;margin-bottom:8px;">
+            Tap to join classmates in real-time encrypted study audio & video.
+          </div>
+          <div class="study-card-action-row">
+            <a href="${escapeHtml(sc.meetUrl)}" target="_blank" rel="noopener noreferrer" class="btn-study-card-action" style="text-decoration:none;display:inline-flex;align-items:center;gap:6px;">
+              <span>Join Study Table 🚀</span>
+            </a>
           </div>
         </div>
       `;
@@ -5603,8 +5654,49 @@ async function sendMessage() {
     if (cmd === '/help') {
       el.messageTextInput.value = '';
       updateInputState();
-      showToast('Commands: /wiki <topic>, /book <title>, /joke, /weather [campus]', '💡');
+      showToast('Commands: /wiki <topic>, /book <title>, /joke, /quote, /meet, /weather [campus], /define <word>, /convert <amt>', '💡');
       return;
+    }
+
+    if (cmd === '/quote' || cmd === '/inspire') {
+      el.messageTextInput.value = '';
+      updateInputState();
+      showToast('Fetching campus inspiration...', '✨');
+      try {
+        const res = await fetch('/api/campus/quote');
+        const data = await res.json();
+        if (data && data.success && data.quote) {
+          await sendStudyCardMessage({
+            type: 'quote',
+            quote: data.quote,
+            author: data.author || 'Campus Motivation'
+          });
+          return;
+        }
+      } catch (err) {
+        showToast('Quote API error: ' + err.message, '⚠️');
+      }
+    }
+
+    if (cmd === '/meet' || cmd === '/table' || cmd === '/studyroom') {
+      el.messageTextInput.value = '';
+      updateInputState();
+      const rawRoom = arg || (state.isGroup ? (state.chatPartnerTitle?.textContent || 'OC Study Group') : (state.currentChatTarget ? `Study with ${state.currentChatTarget}` : 'OC Study Table'));
+      const safeRoomSlug = rawRoom.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 40) || 'oc-study-lounge';
+      const uniqueRoomName = `oc-connect-${safeRoomSlug}-${Math.random().toString(36).slice(2, 6)}`;
+      const meetUrl = `https://meet.jit.si/${encodeURIComponent(uniqueRoomName)}`;
+
+      showToast('Creating live study room...', '🎙️');
+      try {
+        await sendStudyCardMessage({
+          type: 'meet',
+          roomName: rawRoom,
+          meetUrl: meetUrl
+        });
+        return;
+      } catch (err) {
+        showToast('Could not start study table: ' + err.message, '⚠️');
+      }
     }
 
     if (cmd === '/joke') {

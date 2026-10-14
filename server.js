@@ -1757,7 +1757,7 @@ const server = http.createServer(async (req, res) => {
         return res.end(JSON.stringify({ success: true, media }));
       }
 
-      // 11a-5. Link Preview Scraper (OpenGraph Cards)
+      // 11a-5. Link Preview Scraper (OpenGraph Cards & GitHub Repo Integration)
       if (pathname === '/api/utils/link-preview' && req.method === 'GET') {
         const targetUrl = parsedUrl.searchParams.get('url') || '';
         if (!targetUrl || (!targetUrl.startsWith('http://') && !targetUrl.startsWith('https://'))) {
@@ -1766,6 +1766,43 @@ const server = http.createServer(async (req, res) => {
         }
 
         try {
+          const parsedObj = new URL(targetUrl);
+
+          // Dedicated GitHub Repository Card Enrichment (Public API)
+          const githubRepoMatch = parsedObj.hostname === 'github.com' && parsedObj.pathname.match(/^\/([^\/]+)\/([^\/]+)\/?$/);
+          if (githubRepoMatch && githubRepoMatch[1] && githubRepoMatch[2]) {
+            const owner = githubRepoMatch[1];
+            const repo = githubRepoMatch[2].replace(/\.git$/, '');
+            if (!['features', 'topics', 'trending', 'collections', 'events', 'settings', 'notifications'].includes(owner)) {
+              try {
+                const ghCtrl = new AbortController();
+                const ghTimeout = setTimeout(() => ghCtrl.abort(), 2800);
+                const ghRes = await fetch(`https://api.github.com/repos/${owner}/${repo}`, {
+                  signal: ghCtrl.signal,
+                  headers: { 'User-Agent': 'OCConnectApp/1.0', 'Accept': 'application/vnd.github.v3+json' }
+                });
+                clearTimeout(ghTimeout);
+                if (ghRes.ok) {
+                  const ghData = await ghRes.json();
+                  return res.end(JSON.stringify({
+                    success: true,
+                    url: targetUrl,
+                    domain: 'github.com',
+                    isGitHubRepo: true,
+                    title: `${ghData.full_name || `${owner}/${repo}`}`,
+                    description: ghData.description || 'GitHub code repository',
+                    stars: ghData.stargazers_count || 0,
+                    forks: ghData.forks_count || 0,
+                    language: ghData.language || 'Code',
+                    image: ghData.owner?.avatar_url || 'https://github.githubassets.com/images/modules/logos_page/GitHub-Mark.png'
+                  }));
+                }
+              } catch (_) {
+                // Fall back gracefully to standard OpenGraph scraping
+              }
+            }
+          }
+
           const controller = new AbortController();
           const timeoutId = setTimeout(() => controller.abort(), 3500);
           const fetchRes = await fetch(targetUrl, {
@@ -1785,7 +1822,6 @@ const server = http.createServer(async (req, res) => {
                             html.match(/<meta name=["']description["'] content=["'](.*?)["']/i);
           const imageMatch = html.match(/<meta property=["']og:image["'] content=["'](.*?)["']/i);
 
-          const parsedObj = new URL(targetUrl);
           let imageUrl = imageMatch ? imageMatch[1] : null;
           if (imageUrl && !imageUrl.startsWith('http')) {
             imageUrl = new URL(imageUrl, targetUrl).href;
@@ -2934,9 +2970,9 @@ const server = http.createServer(async (req, res) => {
         }
       }
 
-      // 19. Daily Student Inspiration Quote
+      // 19. Daily Student Inspiration Quote (ZenQuotes API Integration with Safe Fallback)
       if (pathname === '/api/campus/quote' && req.method === 'GET') {
-        const quotes = [
+        const fallbackQuotes = [
           { quote: "Success is the sum of small efforts, repeated day in and day out.", author: "Robert Collier" },
           { quote: "The beautiful thing about learning is that no one can take it away from you.", author: "B.B. King" },
           { quote: "You don't have to be great to start, but you have to start to be great.", author: "Zig Ziglar" },
@@ -2944,7 +2980,27 @@ const server = http.createServer(async (req, res) => {
           { quote: "Education is the most powerful weapon which you can use to change the world.", author: "Nelson Mandela" },
           { quote: "Believe you can and you're halfway there.", author: "Theodore Roosevelt" }
         ];
-        const pick = quotes[Math.floor(Math.random() * quotes.length)];
+
+        try {
+          const zCtrl = new AbortController();
+          const zTimeout = setTimeout(() => zCtrl.abort(), 2500);
+          const zRes = await fetch('https://zenquotes.io/api/random', { signal: zCtrl.signal });
+          clearTimeout(zTimeout);
+          if (zRes.ok) {
+            const zData = await zRes.json();
+            if (Array.isArray(zData) && zData[0] && zData[0].q) {
+              return res.end(JSON.stringify({
+                success: true,
+                quote: zData[0].q,
+                author: zData[0].a || 'Campus Inspiration'
+              }));
+            }
+          }
+        } catch (_) {
+          // Graceful fallback to curated student quotes
+        }
+
+        const pick = fallbackQuotes[Math.floor(Math.random() * fallbackQuotes.length)];
         return res.end(JSON.stringify({ success: true, quote: pick.quote, author: pick.author }));
       }
 
