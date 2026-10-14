@@ -9,3 +9,5 @@ node_modules/
 gh
 data/*.db-wal
 data/*.db-shm
+data/*.pre_sync_bak
+data/*_temp.db
