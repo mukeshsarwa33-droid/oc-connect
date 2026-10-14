@@ -3510,6 +3510,56 @@ const server = http.createServer(async (req, res) => {
         }));
       }
 
+      // 24c. GIF Search & Trending Hub (Giphy Public API Integration with Fallbacks)
+      if (pathname === '/api/gifs/search' && req.method === 'GET') {
+        const query = (parsedUrl.searchParams.get('q') || '').trim();
+        const limit = Math.min(parseInt(parsedUrl.searchParams.get('limit') || '20', 10), 30);
+        const giphyKey = 'sXpGFDGZs0Dv1mmNFvYaGUvYwKX0PWIh';
+
+        const fallbackGifs = [
+          { id: 'study1', title: 'Studying hard', url: 'https://media.giphy.com/media/1hXY6iNdTFpTW4je85/giphy.gif', preview: 'https://media.giphy.com/media/1hXY6iNdTFpTW4je85/200.gif' },
+          { id: 'study2', title: 'Exam stress', url: 'https://media.giphy.com/media/3oKIPnAiaMCws8nOsE/giphy.gif', preview: 'https://media.giphy.com/media/3oKIPnAiaMCws8nOsE/200.gif' },
+          { id: 'thumbsup', title: 'Good job', url: 'https://media.giphy.com/media/111ebonMs90YLu/giphy.gif', preview: 'https://media.giphy.com/media/111ebonMs90YLu/200.gif' },
+          { id: 'coffee', title: 'Need coffee', url: 'https://media.giphy.com/media/hPTZgtzfRIB5Nfb5rL/giphy.gif', preview: 'https://media.giphy.com/media/hPTZgtzfRIB5Nfb5rL/200.gif' },
+          { id: 'party', title: 'Celebrate finish', url: 'https://media.giphy.com/media/artj92V8o75VPL7AeQ/giphy.gif', preview: 'https://media.giphy.com/media/artj92V8o75VPL7AeQ/200.gif' },
+          { id: 'code', title: 'Coding fast', url: 'https://media.giphy.com/media/unQ3IJU2RG7DO/giphy.gif', preview: 'https://media.giphy.com/media/unQ3IJU2RG7DO/200.gif' }
+        ];
+
+        try {
+          const gCtrl = new AbortController();
+          const gTimeout = setTimeout(() => gCtrl.abort(), 3500);
+          const targetGiphyUrl = query
+            ? `https://api.giphy.com/v1/gifs/search?api_key=${giphyKey}&q=${encodeURIComponent(query)}&limit=${limit}&rating=g`
+            : `https://api.giphy.com/v1/gifs/trending?api_key=${giphyKey}&limit=${limit}&rating=g`;
+
+          const gRes = await fetch(targetGiphyUrl, { signal: gCtrl.signal });
+          clearTimeout(gTimeout);
+
+          if (gRes.ok) {
+            const gData = await gRes.json();
+            if (Array.isArray(gData.data) && gData.data.length > 0) {
+              const gifs = gData.data.map(item => ({
+                id: item.id,
+                title: item.title || 'GIF',
+                url: item.images?.downsized?.url || item.images?.original?.url || item.images?.fixed_height?.url,
+                preview: item.images?.fixed_height_small?.url || item.images?.fixed_height?.url || item.images?.downsized?.url
+              })).filter(g => !!g.url);
+
+              if (gifs.length > 0) {
+                return res.end(JSON.stringify({ success: true, gifs }));
+              }
+            }
+          }
+        } catch (_) {
+          // Graceful degradation to local student study GIFs
+        }
+
+        return res.end(JSON.stringify({
+          success: true,
+          gifs: fallbackGifs
+        }));
+      }
+
       // 25. SSE Real-Time Stream Endpoint (Supports /api/stream and /api/events)
       if ((pathname === '/api/stream' || pathname === '/api/events') && req.method === 'GET') {
         const username = (parsedUrl.searchParams.get('username') || '').trim().toLowerCase();

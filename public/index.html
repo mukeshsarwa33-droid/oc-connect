@@ -771,6 +771,12 @@
             </div>
             <span>Photos & Videos</span>
           </button>
+          <button type="button" class="attachment-item" id="attach-opt-gif">
+            <div class="attach-icon-circle bg-green">
+              <span style="font-weight:900;font-size:13px;color:white;letter-spacing:0.5px;">GIF</span>
+            </div>
+            <span>Send GIF</span>
+          </button>
           <button type="button" class="attachment-item" id="attach-opt-docs">
             <div class="attach-icon-circle bg-purple">
               <svg viewBox="0 0 24 24" width="22" height="22" fill="white"><path d="M14 2H6c-1.1 0-1.99.9-1.99 2L4 20c0 1.1.89 2 1.99 2H18c1.1 0 2-.9 2-2V8l-6-6zm2 16H8v-2h8v2zm0-4H8v-2h8v2zm-3-5V3.5L18.5 9H13z"/></svg>
@@ -2422,6 +2428,40 @@
             <div class="empty-icon">📁</div>
             <p>No media shared in this conversation yet</p>
           </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- GIF PICKER MODAL (GIPHY PUBLIC INTEGRATION) -->
+  <div id="modal-gif-picker" class="modal-backdrop hidden">
+    <div class="modal-card gif-picker-card">
+      <div class="ios-sheet-handle"></div>
+      <div class="modal-header">
+        <button id="btn-close-gif-picker" type="button" class="btn-back-ios">
+          <svg viewBox="0 0 24 24" width="20" height="20" fill="#007AFF"><path d="M15.41 7.41L14 6l-6 6 6 6 1.41-1.41L10.83 12z"/></svg>
+          <span class="back-text">Done</span>
+        </button>
+        <h3>Send GIF</h3>
+        <div style="width:40px"></div>
+      </div>
+      <div class="modal-body gif-picker-body">
+        <div class="gif-search-bar-wrap">
+          <span class="gif-search-icon">🔍</span>
+          <input type="text" id="gif-search-input" class="gif-search-input" placeholder="Search millions of GIFs (e.g. study, coffee, high five)..." autocomplete="off">
+          <button id="btn-clear-gif-search" type="button" class="gif-search-clear hidden">✕</button>
+        </div>
+        <div class="gif-quick-tags">
+          <button type="button" class="gif-tag-pill active" data-tag="trending">🔥 Trending</button>
+          <button type="button" class="gif-tag-pill" data-tag="college">🎓 College</button>
+          <button type="button" class="gif-tag-pill" data-tag="study">📚 Study</button>
+          <button type="button" class="gif-tag-pill" data-tag="coffee">☕ Coffee</button>
+          <button type="button" class="gif-tag-pill" data-tag="celebrate">🎉 Yay!</button>
+          <button type="button" class="gif-tag-pill" data-tag="tired">😴 Tired</button>
+          <button type="button" class="gif-tag-pill" data-tag="high five">✋ High Five</button>
+        </div>
+        <div id="gif-grid-container" class="gif-grid-container">
+          <div class="gif-loading-state">Loading GIFs... ✨</div>
         </div>
       </div>
     </div>

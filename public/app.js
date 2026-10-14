@@ -5681,7 +5681,14 @@ async function sendMessage() {
     if (cmd === '/help') {
       el.messageTextInput.value = '';
       updateInputState();
-      showToast('Commands: /wiki <topic>, /book <title>, /joke, /quote, /meet, /weather [campus], /define <word>, /convert <amt>', '💡');
+      showToast('Commands: /gif <term>, /wiki <topic>, /book <title>, /joke, /quote, /meet, /weather [campus], /define <word>, /convert <amt>', '💡');
+      return;
+    }
+
+    if (cmd === '/gif') {
+      el.messageTextInput.value = '';
+      updateInputState();
+      openGifPicker(arg || 'trending');
       return;
     }
 
@@ -6123,11 +6130,182 @@ function readFileAsBase64(file) {
 // Cupertino Attachment Action Sheet & Media Sharing
 const attachmentSheetBackdrop = document.getElementById('attachment-sheet-backdrop');
 const attachOptPhotos = document.getElementById('attach-opt-photos');
+const attachOptGif = document.getElementById('attach-opt-gif');
 const attachOptDocs = document.getElementById('attach-opt-docs');
 const attachOptLocation = document.getElementById('attach-opt-location');
 const attachOptDefine = document.getElementById('attach-opt-define');
 const attachOptConvert = document.getElementById('attach-opt-convert');
 const attachOptAdvice = document.getElementById('attach-opt-advice');
+
+// GIF Picker Controller (Giphy Public API Integration)
+const modalGifPicker = document.getElementById('modal-gif-picker');
+const btnCloseGifPicker = document.getElementById('btn-close-gif-picker');
+const gifSearchInput = document.getElementById('gif-search-input');
+const btnClearGifSearch = document.getElementById('btn-clear-gif-search');
+const gifGridContainer = document.getElementById('gif-grid-container');
+
+async function openGifPicker(initialQuery = '') {
+  if (!state.currentChatTarget) {
+    showToast('Please open a chat to send a GIF.', '💬');
+    return;
+  }
+  openModal(modalGifPicker);
+  if (gifSearchInput) {
+    gifSearchInput.value = initialQuery && initialQuery !== 'trending' ? initialQuery : '';
+    if (btnClearGifSearch) btnClearGifSearch.classList.toggle('hidden', !gifSearchInput.value);
+  }
+  loadGifs(initialQuery || 'trending');
+}
+
+async function loadGifs(query = '') {
+  if (!gifGridContainer) return;
+  gifGridContainer.innerHTML = '<div class="gif-loading-state">Finding awesome GIFs... ✨</div>';
+
+  try {
+    const qParam = query && query !== 'trending' ? `q=${encodeURIComponent(query)}` : '';
+    const res = await fetch(`/api/gifs/search?${qParam}`);
+    const data = await res.json();
+
+    if (data && data.success && Array.isArray(data.gifs) && data.gifs.length > 0) {
+      gifGridContainer.innerHTML = data.gifs.map(g => `
+        <div class="gif-grid-item" data-gif-url="${escapeHtml(g.url)}" data-gif-title="${escapeHtml(g.title || 'GIF')}">
+          <img src="${escapeHtml(g.preview || g.url)}" alt="${escapeHtml(g.title || 'GIF')}" loading="lazy">
+        </div>
+      `).join('');
+
+      gifGridContainer.querySelectorAll('.gif-grid-item').forEach(item => {
+        item.addEventListener('click', async () => {
+          const gifUrl = item.dataset.gifUrl;
+          closeModal(modalGifPicker);
+          await sendGifMessage(gifUrl);
+        });
+      });
+    } else {
+      gifGridContainer.innerHTML = '<div class="gif-empty-state">No GIFs found. Try another search term! 🔍</div>';
+    }
+  } catch (err) {
+    gifGridContainer.innerHTML = '<div class="gif-empty-state">Could not load GIFs. Check connection. ⚠️</div>';
+  }
+}
+
+async function sendGifMessage(gifUrl) {
+  if (!state.currentChatTarget || !gifUrl) return;
+  if (!state.currentUser || !state.currentUser.username) {
+    showToast('Please sign in to send GIFs.', '⚠️');
+    return;
+  }
+
+  const clientMsgId = 'msg_' + Date.now() + '_' + Math.random().toString(36).substring(2, 7);
+  state.renderedMsgIds.add(clientMsgId);
+
+  const tempMsg = {
+    id: clientMsgId,
+    sender: state.currentUser.username,
+    displayName: state.currentUser.displayName,
+    text: '',
+    image: gifUrl,
+    timestamp: Date.now(),
+    status: 'pending'
+  };
+
+  const emptyHint = document.getElementById('chat-empty-hint');
+  if (emptyHint) emptyHint.remove();
+
+  appendMessageToChat(tempMsg, true);
+  scrollToBottom();
+  playSentSound();
+
+  const sentKey = state.isGroup ? state.currentGroupId : state.currentChatTarget;
+  const normTargetKey = state.isGroup ? `group_${state.currentGroupId}` : (state.isChannel ? `channel_${state.currentChatTarget.toLowerCase()}` : `dm_${state.currentChatTarget.toLowerCase()}`);
+  LocalDeviceStore.appendMessage(normTargetKey, tempMsg);
+
+  try {
+    const body = {
+      id: clientMsgId,
+      sender: state.currentUser.username,
+      image: gifUrl
+    };
+    if (state.isGroup) {
+      body.groupId = state.currentGroupId;
+    } else if (state.isChannel) {
+      body.channel = state.currentChatTarget;
+    } else {
+      body.recipient = state.currentChatTarget;
+    }
+
+    const res = await fetch('/api/messages/send', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body)
+    });
+    const data = await res.json();
+    if (!res.ok) {
+      showToast(data.error || 'Failed to send GIF', '⚠️');
+    } else {
+      tempMsg.status = 'sent';
+      LocalDeviceStore.appendMessage(normTargetKey, tempMsg);
+      const bubble = document.querySelector(`.message-bubble[data-msg-id="${clientMsgId}"]`);
+      if (bubble) {
+        const statusEl = bubble.querySelector('.imessage-status');
+        if (statusEl) {
+          const starBtn = bubble.querySelector('.msg-star-btn');
+          const starHtml = starBtn ? starBtn.outerHTML : '';
+          statusEl.innerHTML = `<span class="msg-tick sent" title="Sent">✓</span> ${starHtml}`;
+        }
+      }
+    }
+    loadRecentChats();
+  } catch (err) {
+    showToast('Error sending GIF: ' + err.message, '❌');
+  }
+}
+
+// Wire GIF modal events
+if (btnCloseGifPicker) {
+  btnCloseGifPicker.addEventListener('click', () => closeModal(modalGifPicker));
+}
+if (modalGifPicker) {
+  modalGifPicker.addEventListener('click', (e) => {
+    if (e.target === modalGifPicker) closeModal(modalGifPicker);
+  });
+}
+let gifDebounceTimer = null;
+if (gifSearchInput) {
+  gifSearchInput.addEventListener('input', () => {
+    const val = gifSearchInput.value.trim();
+    if (btnClearGifSearch) btnClearGifSearch.classList.toggle('hidden', !val);
+    clearTimeout(gifDebounceTimer);
+    gifDebounceTimer = setTimeout(() => {
+      loadGifs(val || 'trending');
+    }, 350);
+  });
+}
+if (btnClearGifSearch) {
+  btnClearGifSearch.addEventListener('click', () => {
+    gifSearchInput.value = '';
+    btnClearGifSearch.classList.add('hidden');
+    loadGifs('trending');
+  });
+}
+document.querySelectorAll('.gif-tag-pill').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('.gif-tag-pill').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    const tag = btn.dataset.tag;
+    if (gifSearchInput) {
+      gifSearchInput.value = tag === 'trending' ? '' : tag;
+      if (btnClearGifSearch) btnClearGifSearch.classList.toggle('hidden', tag === 'trending');
+    }
+    loadGifs(tag);
+  });
+});
+
+if (attachOptGif) {
+  attachOptGif.addEventListener('click', () => {
+    closeAttachmentSheet();
+    openGifPicker('trending');
+  });
+}
 
 function openAttachmentSheet() {
   if (!state.currentChatTarget) {
