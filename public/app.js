@@ -6676,7 +6676,7 @@ if (elBtnDictation) {
       speechRecognitionInstance.onstart = () => {
         isDictating = true;
         elBtnDictation.classList.add('listening');
-        elBtnDictation.title = 'Listening... tap to finish dictation';
+        elBtnDictation.title = 'Listening... speak now, tap again to finish';
         showToast('Listening... speak your message 🎙️', '🎤');
       };
 
@@ -6687,10 +6687,12 @@ if (elBtnDictation) {
             transcript += event.results[i][0].transcript;
           }
         }
-        if (transcript && el.messageInput) {
-          const current = el.messageInput.value;
-          el.messageInput.value = (current ? current.trim() + ' ' : '') + transcript.trim() + ' ';
-          el.messageInput.focus();
+        const targetInput = el.messageTextInput || document.getElementById('message-text-input');
+        if (transcript && targetInput) {
+          const current = targetInput.value;
+          targetInput.value = (current ? current.trim() + ' ' : '') + transcript.trim() + ' ';
+          targetInput.focus();
+          updateInputState();
         }
       };
 
@@ -6698,6 +6700,11 @@ if (elBtnDictation) {
         console.warn('[Speech Recognition Info]', err);
         isDictating = false;
         elBtnDictation.classList.remove('listening');
+        if (err.error === 'not-allowed') {
+          showToast('Microphone access denied for dictation. Allow microphone in browser.', '⚠️');
+        } else if (err.error !== 'no-speech') {
+          showToast('Dictation paused. Tap mic to try again.', 'ℹ️');
+        }
       };
 
       speechRecognitionInstance.onend = () => {
@@ -6707,6 +6714,7 @@ if (elBtnDictation) {
 
       elBtnDictation.addEventListener('click', (e) => {
         e.preventDefault();
+        e.stopPropagation();
         if (!speechRecognitionInstance) return;
         if (isDictating) {
           speechRecognitionInstance.stop();
@@ -6714,13 +6722,23 @@ if (elBtnDictation) {
           try {
             speechRecognitionInstance.start();
           } catch (_) {
-            speechRecognitionInstance.stop();
+            try {
+              speechRecognitionInstance.stop();
+              setTimeout(() => speechRecognitionInstance.start(), 200);
+            } catch (err2) {
+              showToast('Speech dictation unavailable: ' + err2.message, '⚠️');
+            }
           }
         }
       });
     } catch (_) {}
   } else {
-    elBtnDictation.style.display = 'none';
+    // If browser doesn't support Web Speech API, clicking mic informs user politely
+    elBtnDictation.addEventListener('click', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      showToast('Voice dictation is supported in Chrome, Safari & Android. Use the blue mic button below for voice notes! 🎤', '💡');
+    });
   }
 }
 
@@ -10614,7 +10632,7 @@ if (el.btnMagicCompose) {
 }
 if (el.attachOptMagicCompose) {
   el.attachOptMagicCompose.addEventListener('click', () => {
-    hideAttachmentSheet();
+    closeAttachmentSheet();
     openMagicComposeModal();
   });
 }
@@ -10632,14 +10650,14 @@ if (el.modalMagicCompose) {
 // ===========================================================================
 
 function openScheduleModal() {
-  const currentText = (el.messageTextInput ? el.messageTextInput.value : '').trim();
-  if (!currentText) {
-    showToast('Please type a message before scheduling ⏰', '⚠️');
+  if (!state.currentChatTarget) {
+    showToast('Please open a chat before scheduling messages.', '💬');
     return;
   }
-
-  if (el.scheduleDraftPreview) {
-    el.scheduleDraftPreview.textContent = currentText;
+  const currentText = (el.messageTextInput ? el.messageTextInput.value : '').trim();
+  const draftInput = document.getElementById('schedule-draft-input');
+  if (draftInput) {
+    draftInput.value = currentText;
   }
 
   // Pre-fill custom datetime picker with tomorrow 9:00 AM
@@ -10651,11 +10669,20 @@ function openScheduleModal() {
   }
 
   openModal(el.modalScheduleMessage);
+  if (draftInput) {
+    setTimeout(() => draftInput.focus(), 250);
+  }
 }
 
 async function submitScheduledMessage(dueTimestamp) {
-  const text = (el.messageTextInput ? el.messageTextInput.value : '').trim();
-  if (!text || !state.currentUser) return;
+  const draftInput = document.getElementById('schedule-draft-input');
+  const text = (draftInput && draftInput.value.trim()) || (el.messageTextInput ? el.messageTextInput.value : '').trim();
+  if (!text) {
+    showToast('Please enter message text to schedule ⏰', '⚠️');
+    if (draftInput) draftInput.focus();
+    return;
+  }
+  if (!state.currentUser) return;
 
   try {
     const payload = {
@@ -10675,7 +10702,11 @@ async function submitScheduledMessage(dueTimestamp) {
     const data = await res.json();
 
     if (data.success) {
-      if (el.messageTextInput) el.messageTextInput.value = '';
+      if (el.messageTextInput) {
+        el.messageTextInput.value = '';
+        updateInputState();
+      }
+      if (draftInput) draftInput.value = '';
       closeModal(el.modalScheduleMessage);
       showToast(`⏰ Message scheduled for ${new Date(dueTimestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`, '⏰');
       loadChatScheduledMessages();
@@ -10752,7 +10783,7 @@ if (el.btnSendMessage) {
 
 if (el.attachOptSchedule) {
   el.attachOptSchedule.addEventListener('click', () => {
-    hideAttachmentSheet();
+    closeAttachmentSheet();
     openScheduleModal();
   });
 }
