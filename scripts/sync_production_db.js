@@ -68,6 +68,12 @@ async function syncProductionDatabase() {
     console.log(`   • Total Messages: ${msgRow.count}`);
     console.log(`   • Total Groups:   ${groupRow.count}`);
 
+    // Clean up old WAL/SHM files to prevent WAL header mismatch
+    const walFile = TARGET_DB_PATH + '-wal';
+    const shmFile = TARGET_DB_PATH + '-shm';
+    if (fs.existsSync(walFile)) { try { fs.unlinkSync(walFile); } catch (_) {} }
+    if (fs.existsSync(shmFile)) { try { fs.unlinkSync(shmFile); } catch (_) {} }
+
     // Replace target DB with validated production DB
     if (fs.existsSync(TARGET_DB_PATH)) {
       const backupPath = TARGET_DB_PATH + '.pre_sync_bak';
@@ -75,6 +81,9 @@ async function syncProductionDatabase() {
     }
 
     fs.renameSync(TEMP_DB_PATH, TARGET_DB_PATH);
+    if (fs.existsSync(TARGET_DB_PATH + '.pre_sync_bak')) {
+      try { fs.unlinkSync(TARGET_DB_PATH + '.pre_sync_bak'); } catch (_) {}
+    }
     console.log(`\n🎉 Success! Live database synced cleanly to: ${TARGET_DB_PATH}`);
     console.log('Your local environment and git repository now mirror production exactly.\n');
   } catch (err) {
