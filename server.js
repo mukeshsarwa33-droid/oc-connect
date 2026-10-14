@@ -446,8 +446,8 @@ const server = http.createServer(async (req, res) => {
           return res.end(JSON.stringify({ error: 'Too many incorrect attempts. For security, this code was invalidated. Please request a new code.' }));
         }
 
-        // Verify code (strict match against generated OTP, with demo safety fallback)
-        const isCodeValid = (cleanCode === otp.code || cleanCode === '123456' || cleanCode === '000000');
+        // Verify code (strict match against generated OTP)
+        const isCodeValid = (cleanCode === otp.code);
         if (!isCodeValid) {
           DB.incrementOtpAttempts(cleanIdentifier);
           const remaining = 5 - (otp.attempts + 1);
