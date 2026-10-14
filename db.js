@@ -2352,17 +2352,78 @@ function autoJoinCampusLounges(username) {
   }
 }
 
+// Ensure Jules and Taylor permanent core user accounts
+function ensureJulesAndTaylor() {
+  try {
+    const usersToEnsure = [
+      {
+        username: 'jules',
+        ocId: '300371822',
+        displayName: 'Jules',
+        major: 'Arts & Science • Kelowna',
+        campus: 'Kelowna Campus (KLO)',
+        avatarColor: '#9C27B0',
+        bio: 'OC Student • Kelowna Campus'
+      },
+      {
+        username: 'taylor',
+        ocId: '300374911',
+        displayName: 'Taylor',
+        major: 'Business Administration • Kelowna',
+        campus: 'Kelowna Campus (KLO)',
+        avatarColor: '#2196F3',
+        bio: 'OC Student • Kelowna Campus'
+      }
+    ];
+
+    for (const u of usersToEnsure) {
+      let existing = DB.getUser(u.username);
+      if (!existing) {
+        existing = DB.upsertUser({
+          username: u.username,
+          ocId: u.ocId,
+          displayName: u.displayName,
+          major: u.major,
+          campus: u.campus,
+          avatarColor: u.avatarColor,
+          avatarImage: null,
+          bio: u.bio,
+          online: true,
+          hasOnboarded: 1,
+          isDemo: false,
+          createdAt: Date.now() - 3600000
+        });
+      }
+      DB.setAlias(u.ocId, u.username);
+      DB.setAlias(u.displayName.toLowerCase(), u.username);
+      autoJoinCampusLounges(u.username);
+
+      try {
+        DB.addFriend('300354198', u.username);
+      } catch (_) {}
+
+      try {
+        stmts.addGroupMember.run('grp_funding_proposal', u.username, 'member', Date.now());
+      } catch (_) {}
+    }
+  } catch (err) {
+    console.error('Warning in ensureJulesAndTaylor:', err.message);
+  }
+}
+
 // Run Migration, Seeding & Relational Participant Backfill
 migrateFromLegacyJson();
 seedDemoStudents();
 migrateLegacyChatIds();
 backfillChatParticipantsAndAliases();
 ensureDefaultCampusGroups();
+ensureJulesAndTaylor();
 
 module.exports = {
   DB,
   getDeterministicChatId,
-  autoJoinCampusLounges
+  autoJoinCampusLounges,
+  ensureJulesAndTaylor
 };
 
 
