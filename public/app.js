@@ -464,7 +464,7 @@ const el = {
   authOcIdInput: document.getElementById('auth-ocid-input'),
   authSignupFields: document.getElementById('auth-signup-fields'),
   authFullNameInput: document.getElementById('auth-fullname-input'),
-  authSignupUsernameInput: document.getElementById('auth-signup-username-input'),
+  authSignupUsernameInput: document.getElementById('auth-username-input') || document.getElementById('auth-signup-username-input'),
   authMajorInput: document.getElementById('auth-major-input'),
   btnRequestOtp: document.getElementById('btn-request-otp'),
   btnRequestOtpText: document.getElementById('btn-request-otp-text'),
@@ -9865,7 +9865,7 @@ if (window.visualViewport) {
   const handleVisualViewportResize = () => {
     const chatScreen = document.getElementById('chat-screen');
     const inputBar = document.querySelector('.chat-input-bar');
-    const messagesArea = document.getElementById('chat-messages');
+    const messagesArea = document.getElementById('messages-container') || document.getElementById('chat-messages');
     
     if (chatScreen && chatScreen.classList.contains('open')) {
       const keyboardHeight = window.innerHeight - window.visualViewport.height;

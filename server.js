@@ -319,9 +319,9 @@ const server = http.createServer(async (req, res) => {
 
       // 1. Auth: Request One-Time OTP (Student Email OR Phone + Student ID)
       if (pathname === '/api/auth/request-otp' && req.method === 'POST') {
-        const { mode, method, email, phone, ocId, fullName, username, major } = await parseJsonBody(req);
+        const { mode, method, email, phone, ocId, fullName, username, major, identifier: bodyIdentifier } = await parseJsonBody(req);
         // Rate limit check: Keyed by student identifier to support shared campus Wi-Fi NAT IPs
-        const rateKey = (email || `${phone}_${ocId}` || clientIp).trim().toLowerCase();
+        const rateKey = (email || bodyIdentifier || `${phone}_${ocId}` || clientIp).trim().toLowerCase();
         if (!checkOtpRateLimit(`id_${rateKey}`, 5, 5 * 60 * 1000)) {
           res.writeHead(429);
           return res.end(JSON.stringify({ error: 'Too many OTP requests for this student account. Please wait 5 minutes.' }));
@@ -341,7 +341,7 @@ const server = http.createServer(async (req, res) => {
         let cleanOcId = null;
 
         if (authMethod === 'email') {
-          cleanEmail = (email || '').trim().toLowerCase();
+          cleanEmail = (email || bodyIdentifier || '').trim().toLowerCase();
           if (!cleanEmail || !cleanEmail.includes('@') || !cleanEmail.includes('.')) {
             res.writeHead(400);
             return res.end(JSON.stringify({ error: 'Please enter a valid student email address (e.g. student@myokanagan.bc.ca).' }));
@@ -939,10 +939,15 @@ const server = http.createServer(async (req, res) => {
       }
 
       // 7. Friends: Send Request
-      if (pathname === '/api/friends/request/send' && req.method === 'POST') {
+      if ((pathname === '/api/friends/request/send' || pathname === '/api/friends/request') && req.method === 'POST') {
         const { from, to } = await parseJsonBody(req);
         const resolvedFrom = resolveUsername(from);
         const resolvedTo = resolveUsername(to);
+
+        if (from && to && from.trim().toLowerCase() === to.trim().toLowerCase()) {
+          res.writeHead(400);
+          return res.end(JSON.stringify({ error: 'Cannot add yourself as a friend' }));
+        }
 
         if (!resolvedFrom || !resolvedTo) {
           res.writeHead(404);
@@ -1390,7 +1395,7 @@ const server = http.createServer(async (req, res) => {
       }
 
       // 11. Messages: Send Message (Supports 1-on-1, Channels, and WhatsApp-Style Groups)
-      if ((pathname === '/api/messages/send' || pathname === '/api/messages') && req.method === 'POST') {
+      if ((pathname === '/api/messages/send' || pathname === '/api/messages' || pathname === '/api/groups/message') && req.method === 'POST') {
         const { sender, recipient, text, image, file, voice, studyCard, channel, groupId, replyTo, id } = await parseJsonBody(req);
         const resolvedSender = resolveUsername(sender);
         const cleanText = (text || '').trim();
@@ -1588,6 +1593,20 @@ const server = http.createServer(async (req, res) => {
         }
 
         return res.end(JSON.stringify({ success: true, message: newMsg }));
+      }
+
+      // 11b. Messages: Mark Chat Messages as Read (Double Blue Ticks)
+      if (pathname === '/api/messages/read' && req.method === 'POST') {
+        const { reader, chatId, sender } = await parseJsonBody(req);
+        const resolvedReader = resolveUsername(reader);
+        if (chatId) {
+          DB.markMessagesRead(chatId, sender ? resolveUsername(sender) : null);
+          if (sender) {
+            broadcastToUser(resolveUsername(sender), 'messages_read', { chatId, reader: resolvedReader });
+          }
+          return res.end(JSON.stringify({ success: true }));
+        }
+        return res.end(JSON.stringify({ success: false, error: 'Missing chatId' }));
       }
 
       // 11a. Messages: Toggle Emoji Reaction (Google Messages / WhatsApp style)
@@ -1892,7 +1911,7 @@ const server = http.createServer(async (req, res) => {
       }
 
       // Groups: Get Group Info & Participants
-      if (pathname === '/api/groups/info' && req.method === 'GET') {
+      if ((pathname === '/api/groups/info' || pathname === '/api/groups/details') && req.method === 'GET') {
         const groupId = (parsedUrl.searchParams.get('groupId') || '').trim();
         const username = (parsedUrl.searchParams.get('username') || '').trim().toLowerCase();
         const resolvedUser = resolveUsername(username);
@@ -2249,7 +2268,7 @@ const server = http.createServer(async (req, res) => {
         }
 
         const messages = DB.getStarredMessages(resolvedUser, 100);
-        return res.end(JSON.stringify({ messages }));
+        return res.end(JSON.stringify({ success: true, messages, starred: messages }));
       }
 
       if (pathname === '/api/messages/starred-ids' && req.method === 'GET') {
@@ -2301,7 +2320,7 @@ const server = http.createServer(async (req, res) => {
         }
 
         const pinnedChats = DB.getPinnedChats(resolvedUser);
-        return res.end(JSON.stringify({ pinnedChats }));
+        return res.end(JSON.stringify({ success: true, pinnedChats, pinned: pinnedChats }));
       }
 
       // ==========================================
@@ -2336,11 +2355,11 @@ const server = http.createServer(async (req, res) => {
           scheduledFor: dueTimestamp
         });
 
-        return res.end(JSON.stringify({ success: true, scheduledMessage: sched }));
+        return res.end(JSON.stringify({ success: true, scheduledMessage: sched, scheduledId: sched ? sched.id : null }));
       }
 
       if (pathname === '/api/messages/scheduled' && req.method === 'GET') {
-        const sender = parsedUrl.searchParams.get('sender');
+        const sender = parsedUrl.searchParams.get('sender') || parsedUrl.searchParams.get('username');
         const resolvedSender = resolveUsername(sender);
         if (!resolvedSender) {
           res.writeHead(400);
@@ -2357,12 +2376,12 @@ const server = http.createServer(async (req, res) => {
           channel
         });
 
-        return res.end(JSON.stringify({ scheduled }));
+        return res.end(JSON.stringify({ success: true, scheduled, scheduledMessages: scheduled }));
       }
 
       if (pathname === '/api/messages/scheduled/cancel' && req.method === 'POST') {
-        const { sender, id } = await parseJsonBody(req);
-        const resolvedSender = resolveUsername(sender);
+        const { sender, username, id } = await parseJsonBody(req);
+        const resolvedSender = resolveUsername(sender || username);
         if (!resolvedSender || !id) {
           res.writeHead(400);
           return res.end(JSON.stringify({ error: 'Missing sender or id' }));
@@ -2541,9 +2560,9 @@ const server = http.createServer(async (req, res) => {
 
       // 15. Verified Trusted User Toggle (Blue Tick)
       if ((pathname === '/api/friends/trust/toggle' || pathname === '/api/users/trust') && req.method === 'POST') {
-        const { me, target } = await parseJsonBody(req);
-        const resolvedMe = resolveUsername(me);
-        const resolvedTarget = resolveUsername(target);
+        const { me, target, truster, trusted } = await parseJsonBody(req);
+        const resolvedMe = resolveUsername(me || truster);
+        const resolvedTarget = resolveUsername(target || trusted);
 
         if (!resolvedMe || !resolvedTarget) {
           res.writeHead(400);
@@ -2805,8 +2824,8 @@ const server = http.createServer(async (req, res) => {
 
       // 17. Campus Safety SOS Alert
       if ((pathname === '/api/sos/trigger' || pathname === '/api/sos/alert') && req.method === 'POST') {
-        const { sender, type, locationName } = await parseJsonBody(req);
-        const resolvedSender = resolveUsername(sender);
+        const { sender, username, type, location, locationName } = await parseJsonBody(req);
+        const resolvedSender = resolveUsername(sender || username);
 
         if (!resolvedSender) {
           res.writeHead(400);
@@ -2819,9 +2838,20 @@ const server = http.createServer(async (req, res) => {
           username: resolvedSender,
           displayName: user.displayName || resolvedSender,
           type: type || 'walk_me_home',
-          location: locationName || 'Okanagan College KLO Campus',
+          location: location || locationName || 'Okanagan College KLO Campus',
           timestamp: Date.now()
         };
+
+        // Persist to SQLite sos_alerts table
+        try {
+          DB.raw.prepare('INSERT OR REPLACE INTO sos_alerts (id, username, display_name, type, timestamp) VALUES (?, ?, ?, ?, ?)').run(
+            alertObj.id,
+            alertObj.username,
+            alertObj.displayName,
+            alertObj.type,
+            alertObj.timestamp
+          );
+        } catch (_) {}
 
         // Broadcast alert into campus-safety room
         const sosMsg = DB.saveMessage({
@@ -2829,7 +2859,7 @@ const server = http.createServer(async (req, res) => {
           channel: 'campus-safety',
           sender: 'SecurityBot',
           displayName: 'Campus Security 🛡️',
-          text: `🚨 SAFETY ALERT: ${user.displayName || resolvedSender} (@${resolvedSender}) activated [${type === 'walk_me_home' ? 'Walk Me Home' : 'Emergency SOS'}] on Kelowna Campus. Security and campus monitors notified.`,
+          text: `🚨 SAFETY ALERT: ${user.displayName || resolvedSender} (@${resolvedSender}) activated [${type === 'walk_me_home' || type === 'walk_safe' ? 'Walk Me Home' : 'Emergency SOS'}] on Kelowna Campus. Security and campus monitors notified.`,
           timestamp: Date.now(),
           status: 'read'
         });
@@ -2838,6 +2868,14 @@ const server = http.createServer(async (req, res) => {
         broadcastToAll('sos_alert', alertObj);
 
         return res.end(JSON.stringify({ success: true, alert: alertObj }));
+      }
+
+      if ((pathname === '/api/sos/recent' || pathname === '/api/sos/alerts') && req.method === 'GET') {
+        let alerts = [];
+        try {
+          alerts = DB.raw.prepare('SELECT * FROM sos_alerts ORDER BY timestamp DESC LIMIT 20').all();
+        } catch (_) {}
+        return res.end(JSON.stringify({ success: true, alerts }));
       }
 
       // 18. Open-Meteo Campus Weather API

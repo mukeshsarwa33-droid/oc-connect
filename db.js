@@ -1381,8 +1381,17 @@ const DB = {
   },
 
   markChatRead(chatId, senderToMarkRead) {
-    const senderClean = senderToMarkRead.trim().toLowerCase().replace(/^@/, '');
-    stmts.markMessagesRead.run(chatId, senderClean);
+    if (!chatId) return;
+    if (senderToMarkRead) {
+      const senderClean = senderToMarkRead.trim().toLowerCase().replace(/^@/, '');
+      stmts.markMessagesRead.run(chatId, senderClean);
+    } else {
+      db.prepare("UPDATE messages SET status = 'read' WHERE chat_id = ?").run(chatId);
+    }
+  },
+
+  markMessagesRead(chatId, senderToMarkRead) {
+    this.markChatRead(chatId, senderToMarkRead);
   },
 
   markMessageDelivered(messageId) {
