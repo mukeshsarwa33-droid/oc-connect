@@ -760,26 +760,40 @@ body {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 14px 16px 8px;
+  padding: 10px 16px 6px;
+  width: 100%;
+  max-width: 100%;
+  box-sizing: border-box;
+}
+
+.brand-info {
+  display: flex;
+  flex-direction: column;
+  flex-shrink: 0;
+  min-width: 0;
 }
 
 .brand-info h2 {
-  font-size: 24px;
+  font-size: 22px;
   font-weight: 700;
   letter-spacing: -0.5px;
   color: #000000;
+  white-space: nowrap;
+  line-height: 1.2;
 }
 
 .status-indicator {
-  font-size: 11.5px;
+  font-size: 11px;
   font-weight: 500;
   color: #34C759;
+  white-space: nowrap;
 }
 
 .app-bar-actions {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 8px;
+  flex-shrink: 0;
 }
 
 .icon-btn {
@@ -7127,6 +7141,10 @@ button:active {
     overscroll-behavior: none !important;
     overscroll-behavior-y: none !important;
     -webkit-overflow-scrolling: touch !important;
+    overflow-x: hidden !important;
+    max-width: 100% !important;
+    width: 100% !important;
+    position: relative !important;
   }
 
   body {
@@ -7134,7 +7152,7 @@ button:active {
     -webkit-user-select: none;
     -webkit-touch-callout: none;
     background-color: var(--ios-bg) !important;
-    width: 100vw !important;
+    width: 100% !important;
     height: 100% !important;
     height: 100dvh !important;
   }
@@ -7143,7 +7161,7 @@ button:active {
   #app-viewport,
   #main-screen,
   #chat-screen {
-    width: 100vw !important;
+    width: 100% !important;
     max-width: 100% !important;
     height: 100% !important;
     height: 100dvh !important;
@@ -7152,6 +7170,54 @@ button:active {
     border: none !important;
     box-shadow: none !important;
     margin: 0 !important;
+    overflow-x: hidden !important;
+  }
+
+  /* Compact header actions on phones so the top bar NEVER overflows or wraps */
+  #btn-install-app,
+  #btn-share-app,
+  #btn-my-qr,
+  #btn-logout,
+  #btn-open-settings-gear,
+  #btn-open-friend-requests {
+    display: none !important;
+  }
+
+  /* Compact user chip: clean circular avatar button */
+  .user-chip {
+    padding: 0 !important;
+    background: transparent !important;
+    border-radius: 50% !important;
+    box-shadow: none !important;
+    border: none !important;
+  }
+  .user-chip #current-user-handle,
+  .user-chip span:last-child {
+    display: none !important;
+  }
+  .user-chip .avatar-sm {
+    width: 32px !important;
+    height: 32px !important;
+    font-size: 13px !important;
+    box-shadow: 0 1px 4px rgba(0, 122, 255, 0.3) !important;
+  }
+
+  .campus-weather-pill {
+    padding: 4px 8px !important;
+    font-size: 12px !important;
+    gap: 4px !important;
+  }
+  .campus-weather-pill .weather-pill-loc {
+    display: none !important;
+  }
+
+  /* Keep tabs bar properly fitted */
+  .tabs-bar {
+    margin: 4px 14px 8px !important;
+  }
+  .tab-btn {
+    padding: 7px 4px !important;
+    font-size: 12px !important;
   }
 
   /* Universal Prevention of iOS Safari Auto-Zoom */
@@ -7178,6 +7244,24 @@ button:active {
   .btn-quick-starred-pill {
     flex-shrink: 0 !important;
   }
+
+  /* Floating SOS action */
+  .floating-container {
+    bottom: max(16px, env(safe-area-inset-bottom, 16px)) !important;
+    left: 14px !important;
+    right: 14px !important;
+  }
+  .btn-fab-sos {
+    padding: 10px 14px !important;
+    font-size: 11.5px !important;
+  }
+  .btn-fab-sos .fab-sos-text {
+    font-size: 11px !important;
+  }
+  .btn-fab-add {
+    width: 48px !important;
+    height: 48px !important;
+  }
 }
 
 .is-standalone-app #btn-install-app {
@@ -7188,7 +7272,7 @@ button:active {
 .is-standalone-app #app-viewport,
 .is-standalone-app #main-screen,
 .is-standalone-app #chat-screen {
-  width: 100vw !important;
+  width: 100% !important;
   max-width: 100% !important;
   height: 100% !important;
   height: 100dvh !important;
@@ -7197,6 +7281,7 @@ button:active {
   border: none !important;
   box-shadow: none !important;
   margin: 0 !important;
+  overflow-x: hidden !important;
 }
 
 /* ==========================================================================
