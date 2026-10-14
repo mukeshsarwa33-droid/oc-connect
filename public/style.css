@@ -690,7 +690,7 @@ body {
   background-color: #F2F2F7;
   border: 1px solid transparent;
   border-radius: 12px;
-  font-size: 15px;
+  font-size: 16px;
   color: #000000;
   outline: none;
   transition: all 0.2s ease;
@@ -753,6 +753,7 @@ body {
   flex-direction: column;
   flex-shrink: 0;
   z-index: 20;
+  padding-top: max(10px, env(safe-area-inset-top, 10px));
 }
 
 .app-bar-content {
@@ -973,7 +974,7 @@ body {
   border: none;
   background: none;
   outline: none;
-  font-size: 14.5px;
+  font-size: 16px;
   width: 100%;
   color: var(--text-dark);
 }
@@ -1250,7 +1251,7 @@ body {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 10px 14px;
+  padding: max(10px, env(safe-area-inset-top, 10px)) max(14px, env(safe-area-inset-right, 14px)) 10px max(14px, env(safe-area-inset-left, 14px));
   flex-shrink: 0;
   z-index: 20;
 }
@@ -1449,7 +1450,7 @@ button, .btn-send-ios, .chat-item, .nav-btn, .avatar-circle, .list-item {
   backdrop-filter: saturate(180%) blur(20px);
   -webkit-backdrop-filter: saturate(180%) blur(20px);
   border-top: 0.5px solid var(--ios-separator);
-  padding: 8px 12px max(10px, env(safe-area-inset-bottom, 10px));
+  padding: 8px max(12px, env(safe-area-inset-right, 12px)) max(12px, env(safe-area-inset-bottom, 12px)) max(12px, env(safe-area-inset-left, 12px));
   display: flex;
   align-items: center;
   gap: 8px;
@@ -1507,7 +1508,7 @@ button, .btn-send-ios, .chat-item, .nav-btn, .avatar-circle, .list-item {
   outline: none;
   resize: none;
   font-family: inherit;
-  font-size: 15.5px;
+  font-size: 16px;
   line-height: 1.35;
   height: 22px;
   min-height: 22px;
@@ -7063,41 +7064,139 @@ button:active {
 }
 
 /* ==========================================================================
-   AUTHENTIC STANDALONE APP DISPLAY & NOTCH SAFE AREA SUPPORT
+   AUTHENTIC STANDALONE APP DISPLAY & NOTCH SAFE AREA SUPPORT (iOS & Android)
    ========================================================================== */
-@supports (padding-top: env(safe-area-inset-top)) {
-  .app-bar, .chat-header-ios {
-    padding-top: max(10px, env(safe-area-inset-top));
-  }
-  .input-area, .tabs-bar {
-    padding-bottom: max(8px, env(safe-area-inset-bottom));
-  }
+:root {
+  --sat: env(safe-area-inset-top, 0px);
+  --sab: env(safe-area-inset-bottom, 0px);
+  --sal: env(safe-area-inset-left, 0px);
+  --sar: env(safe-area-inset-right, 0px);
 }
 
-@media (display-mode: standalone), (display-mode: minimal-ui) {
+/* Authentic Top Navigation Safe Area (Notch & Dynamic Island) */
+.app-bar {
+  padding-top: max(12px, env(safe-area-inset-top, 12px)) !important;
+  padding-left: max(0px, env(safe-area-inset-left, 0px));
+  padding-right: max(0px, env(safe-area-inset-right, 0px));
+}
+
+.chat-header {
+  padding-top: max(12px, env(safe-area-inset-top, 12px)) !important;
+  padding-left: max(14px, env(safe-area-inset-left, 14px)) !important;
+  padding-right: max(14px, env(safe-area-inset-right, 14px)) !important;
+}
+
+/* Authentic Bottom Safe Area (iPhone Home Bar) */
+.chat-input-bar {
+  padding-bottom: max(12px, env(safe-area-inset-bottom, 12px)) !important;
+  padding-left: max(10px, env(safe-area-inset-left, 10px)) !important;
+  padding-right: max(10px, env(safe-area-inset-right, 10px)) !important;
+}
+
+#auth-screen {
+  padding-top: max(24px, env(safe-area-inset-top, 24px)) !important;
+  padding-bottom: max(24px, env(safe-area-inset-bottom, 24px)) !important;
+  padding-left: max(16px, env(safe-area-inset-left, 16px)) !important;
+  padding-right: max(16px, env(safe-area-inset-right, 16px)) !important;
+  overflow-y: auto !important;
+  -webkit-overflow-scrolling: touch !important;
+}
+
+.auth-card {
+  margin: auto 0;
+}
+
+#inapp-notification-banner {
+  top: max(12px, env(safe-area-inset-top, 12px)) !important;
+}
+
+.modal-card {
+  padding-bottom: max(16px, env(safe-area-inset-bottom, 16px)) !important;
+  padding-left: env(safe-area-inset-left, 0px);
+  padding-right: env(safe-area-inset-right, 0px);
+}
+
+.call-sheet-card {
+  padding-top: max(28px, env(safe-area-inset-top, 28px)) !important;
+  padding-bottom: max(28px, env(safe-area-inset-bottom, 28px)) !important;
+}
+
+/* Phone App Full-Bleed & Standalone Behavior */
+@media (max-width: 768px), (display-mode: standalone), (display-mode: minimal-ui) {
+  html, body {
+    overscroll-behavior: none !important;
+    overscroll-behavior-y: none !important;
+    -webkit-overflow-scrolling: touch !important;
+  }
+
   body {
     user-select: none;
     -webkit-user-select: none;
     -webkit-touch-callout: none;
+    background-color: var(--ios-bg) !important;
+    width: 100vw !important;
+    height: 100% !important;
+    height: 100dvh !important;
   }
-  .screen {
-    height: 100vh !important;
-    max-height: 100vh !important;
+
+  .screen,
+  #app-viewport,
+  #main-screen,
+  #chat-screen {
+    width: 100vw !important;
+    max-width: 100% !important;
+    height: 100% !important;
+    height: 100dvh !important;
+    max-height: 100dvh !important;
     border-radius: 0 !important;
     border: none !important;
     box-shadow: none !important;
+    margin: 0 !important;
   }
-  #app-viewport {
-    height: 100vh !important;
-    max-height: 100vh !important;
+
+  /* Universal Prevention of iOS Safari Auto-Zoom */
+  input,
+  textarea,
+  select {
+    font-size: 16px !important;
+  }
+
+  /* Horizontal swipe for quick action pills on phone */
+  .chats-quick-actions-bar {
+    overflow-x: auto !important;
+    -webkit-overflow-scrolling: touch !important;
+    scrollbar-width: none !important;
+    white-space: nowrap !important;
+  }
+
+  .chats-quick-actions-bar::-webkit-scrollbar {
+    display: none !important;
+  }
+
+  .btn-quick-group-pill,
+  .btn-quick-chat-pill,
+  .btn-quick-starred-pill {
+    flex-shrink: 0 !important;
   }
 }
 
-.is-standalone-app .screen {
-  height: 100vh !important;
-  max-height: 100vh !important;
+.is-standalone-app #btn-install-app {
+  display: none !important;
+}
+
+.is-standalone-app .screen,
+.is-standalone-app #app-viewport,
+.is-standalone-app #main-screen,
+.is-standalone-app #chat-screen {
+  width: 100vw !important;
+  max-width: 100% !important;
+  height: 100% !important;
+  height: 100dvh !important;
+  max-height: 100dvh !important;
   border-radius: 0 !important;
   border: none !important;
+  box-shadow: none !important;
+  margin: 0 !important;
 }
 
 /* ==========================================================================

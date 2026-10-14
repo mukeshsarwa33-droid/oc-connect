@@ -1,7 +1,7 @@
 // OC Connect Service Worker (PWA Engine for Android, iOS & Desktop)
 // Provides instant offline app shell loading, lockscreen/tray push notifications, and background sync
 
-const CACHE_NAME = 'oc-connect-v1.2.0';
+const CACHE_NAME = 'oc-connect-v1.3.0-ios-optimized';
 const STATIC_ASSETS = [
   '/',
   '/?source=pwa',

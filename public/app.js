@@ -9855,8 +9855,36 @@ function checkIsAppInstalled() {
                        localStorage.getItem('oc_app_installed') === 'true';
   if (isStandalone) {
     document.documentElement.classList.add('is-standalone-app');
+    if (document.body) document.body.classList.add('is-standalone-app');
   }
   return isStandalone;
+}
+
+// iOS Safari & Standalone PWA Keyboard / Viewport Handler
+if (window.visualViewport) {
+  const handleVisualViewportResize = () => {
+    const chatScreen = document.getElementById('chat-screen');
+    const inputBar = document.querySelector('.chat-input-bar');
+    const messagesArea = document.getElementById('chat-messages');
+    
+    if (chatScreen && chatScreen.classList.contains('open')) {
+      const keyboardHeight = window.innerHeight - window.visualViewport.height;
+      if (keyboardHeight > 120) {
+        // Keyboard is open on mobile
+        if (inputBar) inputBar.style.transform = `translateY(-${keyboardHeight}px)`;
+        if (messagesArea) {
+          messagesArea.style.paddingBottom = `${keyboardHeight + 60}px`;
+          messagesArea.scrollTop = messagesArea.scrollHeight;
+        }
+      } else {
+        // Keyboard is closed
+        if (inputBar) inputBar.style.transform = '';
+        if (messagesArea) messagesArea.style.paddingBottom = '';
+      }
+    }
+  };
+  window.visualViewport.addEventListener('resize', handleVisualViewportResize);
+  window.visualViewport.addEventListener('scroll', handleVisualViewportResize);
 }
 
 function updateInstallUi() {
