@@ -1846,6 +1846,63 @@ const server = http.createServer(async (req, res) => {
       }
 
       // ==========================================
+      // 11. DATABASE BACKUP & SYNC ENGINE
+      // ==========================================
+
+      // GET /api/admin/db/export (Streams raw production SQLite database for safe automated backups)
+      if (pathname === '/api/admin/db/export' && req.method === 'GET') {
+        const adminKey = parsedUrl.searchParams.get('key') || req.headers['x-admin-key'];
+        const expectedKey = process.env.ADMIN_KEY || 'oc_connect_master_key_2026';
+        if (adminKey !== expectedKey) {
+          res.writeHead(403);
+          return res.end(JSON.stringify({ error: 'Unauthorized: Invalid admin key' }));
+        }
+
+        // Flush WAL checkpoint to disk before streaming to ensure latest data is committed
+        try {
+          if (typeof DB.checkpointWAL === 'function') {
+            DB.checkpointWAL();
+          }
+        } catch (_) {}
+
+        const dbFilePath = DB.getDatabasePath ? DB.getDatabasePath() : path.join(__dirname, 'data', 'oc_connect.db');
+        if (!fs.existsSync(dbFilePath)) {
+          res.writeHead(404);
+          return res.end(JSON.stringify({ error: 'Database file not found' }));
+        }
+
+        const stat = fs.statSync(dbFilePath);
+        res.writeHead(200, {
+          'Content-Type': 'application/octet-stream',
+          'Content-Length': stat.size,
+          'Content-Disposition': 'attachment; filename="oc_connect.db"',
+          'X-Database-Size': stat.size,
+          'X-Storage-Dir': DB.getDataDirectory ? DB.getDataDirectory() : 'default'
+        });
+        const readStream = fs.createReadStream(dbFilePath);
+        return readStream.pipe(res);
+      }
+
+      // GET /api/admin/storage/status (Check if persistent disk is active and verify record counts)
+      if (pathname === '/api/admin/storage/status' && req.method === 'GET') {
+        const dataDir = DB.getDataDirectory ? DB.getDataDirectory() : path.join(__dirname, 'data');
+        const dbPath = DB.getDatabasePath ? DB.getDatabasePath() : path.join(dataDir, 'oc_connect.db');
+        const isPersistent = dataDir.startsWith('/var/data') || dataDir.startsWith('/data') || (process.env.DATA_DIR && dataDir === process.env.DATA_DIR);
+        const userCount = DB.countUsers ? DB.countUsers() : { total: 0 };
+
+        return res.end(JSON.stringify({
+          success: true,
+          dataDirectory: dataDir,
+          isPersistentDisk: Boolean(isPersistent),
+          databasePath: dbPath,
+          databaseExists: fs.existsSync(dbPath),
+          databaseSizeBytes: fs.existsSync(dbPath) ? fs.statSync(dbPath).size : 0,
+          totalUsers: userCount.total || 0,
+          timestamp: Date.now()
+        }));
+      }
+
+      // ==========================================
       // 11b. WHATSAPP-STYLE GROUPS API ENDPOINTS
       // ==========================================
 

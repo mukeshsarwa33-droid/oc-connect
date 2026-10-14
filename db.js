@@ -5,13 +5,38 @@ const { DatabaseSync } = require('node:sqlite');
 const fs = require('fs');
 const path = require('path');
 
-const DATA_DIR = path.join(__dirname, 'data');
+// Smart Persistent Storage Resolver (Render Disk / Production Volume / Local Fallback)
+function resolveDataDirectory() {
+  if (process.env.DATA_DIR && fs.existsSync(process.env.DATA_DIR)) {
+    return process.env.DATA_DIR;
+  }
+  if (fs.existsSync('/var/data')) {
+    return '/var/data';
+  }
+  if (fs.existsSync('/data')) {
+    return '/data';
+  }
+  return path.join(__dirname, 'data');
+}
+
+const DATA_DIR = resolveDataDirectory();
 if (!fs.existsSync(DATA_DIR)) {
   fs.mkdirSync(DATA_DIR, { recursive: true });
 }
 
 const DB_PATH = path.join(DATA_DIR, 'oc_connect.db');
 const JSON_DB_FILE = path.join(DATA_DIR, 'db.json');
+
+// When using persistent disk mount and DB doesn't exist yet, seed from bundled repo DB
+const BUNDLED_DB_PATH = path.join(__dirname, 'data', 'oc_connect.db');
+if (DATA_DIR !== path.join(__dirname, 'data') && !fs.existsSync(DB_PATH) && fs.existsSync(BUNDLED_DB_PATH)) {
+  try {
+    fs.copyFileSync(BUNDLED_DB_PATH, DB_PATH);
+    console.log(`[Storage] Initialized persistent disk database from bundled template at ${DB_PATH}`);
+  } catch (err) {
+    console.error('[Storage] Error copying bundled database to persistent disk:', err);
+  }
+}
 
 const db = new DatabaseSync(DB_PATH);
 
@@ -606,6 +631,24 @@ function getDeterministicChatId(userA, userB) {
 // Database API
 const DB = {
   raw: db,
+
+  getDatabasePath() {
+    return DB_PATH;
+  },
+
+  getDataDirectory() {
+    return DATA_DIR;
+  },
+
+  checkpointWAL() {
+    try {
+      db.exec('PRAGMA wal_checkpoint(TRUNCATE);');
+      return true;
+    } catch (err) {
+      console.warn('[Storage] WAL checkpoint warning:', err.message);
+      return false;
+    }
+  },
 
   getUser(username) {
     if (!username) return null;

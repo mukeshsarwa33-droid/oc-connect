@@ -5,7 +5,8 @@
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
-    "test": "node test_integrity.js"
+    "test": "node test_integrity.js",
+    "sync:prod": "node scripts/sync_production_db.js"
   },
   "engines": {
     "node": ">=22.0.0"

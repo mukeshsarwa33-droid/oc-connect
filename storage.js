@@ -4,7 +4,20 @@
 const fs = require('fs');
 const path = require('path');
 
-const UPLOADS_ROOT = path.join(__dirname, 'uploads');
+function resolveUploadsRoot() {
+  if (process.env.DATA_DIR && fs.existsSync(process.env.DATA_DIR)) {
+    return path.join(process.env.DATA_DIR, 'uploads');
+  }
+  if (fs.existsSync('/var/data')) {
+    return path.join('/var/data', 'uploads');
+  }
+  if (fs.existsSync('/data')) {
+    return path.join('/data', 'uploads');
+  }
+  return path.join(__dirname, 'uploads');
+}
+
+const UPLOADS_ROOT = resolveUploadsRoot();
 const DIRS = {
   photos: path.join(UPLOADS_ROOT, 'photos'),
   documents: path.join(UPLOADS_ROOT, 'documents'),
