@@ -1058,14 +1058,14 @@
   <!-- WHATSAPP-STYLE CONTACT PROFILE & SHARED MEDIA DRAWER -->
   <div id="modal-contact-profile" class="modal-backdrop hidden">
     <div class="modal-card profile-modal-card">
-      <div class="ios-sheet-handle"></div>
+      <div class="ios-sheet-handle" role="button" aria-label="Close Profile" title="Tap to close"></div>
       <div class="modal-header">
-        <button id="btn-close-profile-modal" class="btn-back-ios">
-          <svg viewBox="0 0 24 24" width="20" height="20" fill="#007AFF"><path d="M15.41 7.41L14 6l-6 6 6 6 1.41-1.41L10.83 12z"/></svg>
-          <span class="back-text">Done</span>
+        <button id="btn-close-profile-modal" type="button" class="btn-back-ios" aria-label="Back">
+          <svg viewBox="0 0 24 24" width="22" height="22" fill="#007AFF" style="pointer-events: none;"><path d="M15.41 7.41L14 6l-6 6 6 6 1.41-1.41L10.83 12z"/></svg>
+          <span class="back-text" style="pointer-events: none;">Back</span>
         </button>
         <h3>Contact Info</h3>
-        <div style="width:40px"></div>
+        <button id="btn-done-profile-modal" type="button" class="btn-done-ios" aria-label="Done">Done</button>
       </div>
       <div class="modal-body profile-modal-body">
         <!-- Main Profile Hero Card -->
@@ -1244,14 +1244,14 @@
   <!-- SETTINGS / MY PROFILE MODAL -->
   <div id="modal-settings" class="modal-backdrop hidden">
     <div class="modal-card settings-modal-card">
-      <div class="ios-sheet-handle"></div>
+      <div class="ios-sheet-handle" role="button" aria-label="Close Settings" title="Tap to close"></div>
       <div class="modal-header">
-        <button id="btn-close-settings-modal" class="btn-back-ios">
-          <svg viewBox="0 0 24 24" width="20" height="20" fill="#007AFF"><path d="M15.41 7.41L14 6l-6 6 6 6 1.41-1.41L10.83 12z"/></svg>
-          <span class="back-text">Done</span>
+        <button id="btn-close-settings-modal" type="button" class="btn-back-ios" aria-label="Back">
+          <svg viewBox="0 0 24 24" width="22" height="22" fill="#007AFF" style="pointer-events: none;"><path d="M15.41 7.41L14 6l-6 6 6 6 1.41-1.41L10.83 12z"/></svg>
+          <span class="back-text" style="pointer-events: none;">Back</span>
         </button>
         <h3>Profile & Account</h3>
-        <div style="width:40px"></div>
+        <button id="btn-done-settings-modal" type="button" class="btn-done-ios" aria-label="Done">Done</button>
       </div>
       <div class="modal-body settings-modal-body">
 
@@ -2090,11 +2090,11 @@
   <!-- ========================================== -->
   <div id="modal-group-info" class="modal-backdrop hidden">
     <div class="modal-card group-info-card">
-      <div class="ios-sheet-handle"></div>
+      <div class="ios-sheet-handle" role="button" aria-label="Close Group Info" title="Tap to close"></div>
       <div class="modal-header">
-        <button id="btn-close-group-info" type="button" class="btn-back-ios">
+        <button id="btn-close-group-info" type="button" class="btn-back-ios" aria-label="Back">
           <svg viewBox="0 0 24 24" width="20" height="20" fill="#007AFF" style="pointer-events: none;"><path d="M15.41 7.41L14 6l-6 6 6 6 1.41-1.41L10.83 12z"/></svg>
-          <span class="back-text">Back</span>
+          <span class="back-text" style="pointer-events: none;">Back</span>
         </button>
         <h3>Group Info</h3>
         <button id="btn-group-info-edit" type="button" class="btn-text-action" style="color: #007AFF; font-size: 14px;">Edit</button>

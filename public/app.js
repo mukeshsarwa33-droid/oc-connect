@@ -654,6 +654,7 @@ const el = {
   // Contact Profile & Shared Media
   modalContactProfile: document.getElementById('modal-contact-profile'),
   btnCloseProfileModal: document.getElementById('btn-close-profile-modal'),
+  btnDoneProfileModal: document.getElementById('btn-done-profile-modal'),
   profileModalAvatar: document.getElementById('profile-modal-avatar'),
   profileModalName: document.getElementById('profile-modal-name'),
   profileModalBadge: document.getElementById('profile-modal-badge'),
@@ -1115,13 +1116,22 @@ function formatTime(timestamp) {
   return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 }
 
-// Fluid Modal Animation Helpers
+// Fluid Modal Animation Helpers & Hardware Back Button / Stack Handling
+window._activeModalStack = window._activeModalStack || [];
+
 function openModal(modalEl) {
   if (!modalEl) return;
   modalEl.classList.remove('hidden');
   requestAnimationFrame(() => {
     modalEl.classList.add('active');
   });
+
+  try {
+    if (!window._activeModalStack.includes(modalEl)) {
+      window._activeModalStack.push(modalEl);
+      window.history.pushState({ ocModalId: modalEl.id || 'modal' }, '');
+    }
+  } catch (_) {}
 }
 
 function closeModal(modalEl) {
@@ -1135,7 +1145,43 @@ function closeModal(modalEl) {
       modalEl.classList.add('hidden');
     }
   }, 260);
+
+  try {
+    if (window._activeModalStack && window._activeModalStack.length > 0) {
+      const idx = window._activeModalStack.indexOf(modalEl);
+      if (idx !== -1) {
+        window._activeModalStack.splice(idx, 1);
+      }
+    }
+  } catch (_) {}
 }
+
+// Global Hardware / Browser Back button (popstate) & Keyboard ESC support
+window.addEventListener('popstate', () => {
+  if (window._activeModalStack && window._activeModalStack.length > 0) {
+    const topModal = window._activeModalStack.pop();
+    if (topModal) closeModal(topModal);
+  } else {
+    const activeModals = Array.from(document.querySelectorAll('.modal-backdrop.active'));
+    if (activeModals.length > 0) {
+      closeModal(activeModals[activeModals.length - 1]);
+    }
+  }
+});
+
+window.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape') {
+    if (window._activeModalStack && window._activeModalStack.length > 0) {
+      const topModal = window._activeModalStack[window._activeModalStack.length - 1];
+      if (topModal) closeModal(topModal);
+    } else {
+      const activeModals = Array.from(document.querySelectorAll('.modal-backdrop.active'));
+      if (activeModals.length > 0) {
+        closeModal(activeModals[activeModals.length - 1]);
+      }
+    }
+  }
+});
 
 // Convert Base64 Data URL to Blob for reliable browser rendering & downloading
 function dataUrlToBlob(dataUrl, defaultType = 'application/octet-stream') {
@@ -7424,6 +7470,39 @@ async function openContactProfile(username) {
   }
 
   loadSharedMediaForProfile(cleanTarget);
+
+  // Bulletproof Back & Close listeners for Contact Profile modal
+  const closeContactProfile = (e) => {
+    if (e && typeof e.preventDefault === 'function') {
+      try { e.preventDefault(); e.stopPropagation(); } catch (_) {}
+    }
+    closeModal(el.modalContactProfile);
+  };
+
+  const btnClose = document.getElementById('btn-close-profile-modal');
+  if (btnClose) {
+    btnClose.onclick = closeContactProfile;
+    btnClose.ontouchend = closeContactProfile;
+  }
+  const btnDone = document.getElementById('btn-done-profile-modal');
+  if (btnDone) {
+    btnDone.onclick = closeContactProfile;
+    btnDone.ontouchend = closeContactProfile;
+  }
+  const sheetHandle = el.modalContactProfile ? el.modalContactProfile.querySelector('.ios-sheet-handle') : null;
+  if (sheetHandle) {
+    sheetHandle.onclick = closeContactProfile;
+    sheetHandle.ontouchend = closeContactProfile;
+    sheetHandle.style.cursor = 'pointer';
+  }
+  if (el.modalContactProfile) {
+    el.modalContactProfile.onclick = (e) => {
+      if (e.target === el.modalContactProfile) {
+        closeContactProfile(e);
+      }
+    };
+  }
+
   openModal(el.modalContactProfile);
 }
 
@@ -7713,7 +7792,25 @@ function closeLightbox() {
 }
 
 if (el.btnCloseProfileModal) {
-  el.btnCloseProfileModal.addEventListener('click', () => closeModal(el.modalContactProfile));
+  el.btnCloseProfileModal.addEventListener('click', (e) => {
+    e.preventDefault();
+    closeModal(el.modalContactProfile);
+  });
+  el.btnCloseProfileModal.addEventListener('touchend', (e) => {
+    e.preventDefault();
+    closeModal(el.modalContactProfile);
+  });
+}
+
+if (el.btnDoneProfileModal) {
+  el.btnDoneProfileModal.addEventListener('click', (e) => {
+    e.preventDefault();
+    closeModal(el.modalContactProfile);
+  });
+  el.btnDoneProfileModal.addEventListener('touchend', (e) => {
+    e.preventDefault();
+    closeModal(el.modalContactProfile);
+  });
 }
 
 if (el.btnCloseDocViewer) {
@@ -8030,8 +8127,28 @@ function renderCreateGroupClassmatesList(query = '') {
 }
 
 function initGroupInfoActions() {
+  const dismissGroupInfo = (e) => {
+    if (e && typeof e.preventDefault === 'function') {
+      try { e.preventDefault(); e.stopPropagation(); } catch (_) {}
+    }
+    closeModal(el.modalGroupInfo);
+  };
+
   if (el.btnCloseGroupInfo) {
-    el.btnCloseGroupInfo.addEventListener('click', () => closeModal(el.modalGroupInfo));
+    el.btnCloseGroupInfo.addEventListener('click', dismissGroupInfo);
+    el.btnCloseGroupInfo.addEventListener('touchend', dismissGroupInfo);
+  }
+
+  if (el.modalGroupInfo) {
+    el.modalGroupInfo.addEventListener('click', (e) => {
+      if (e.target === el.modalGroupInfo) dismissGroupInfo(e);
+    });
+    const handleEl = el.modalGroupInfo.querySelector('.ios-sheet-handle');
+    if (handleEl) {
+      handleEl.addEventListener('click', dismissGroupInfo);
+      handleEl.addEventListener('touchend', dismissGroupInfo);
+      handleEl.style.cursor = 'pointer';
+    }
   }
 
   // Edit Group Subject / Description
@@ -8503,6 +8620,7 @@ function compressAvatarImage(file, maxDim, quality) {
 const elSettings = {
   modal: document.getElementById('modal-settings'),
   btnClose: document.getElementById('btn-close-settings-modal'),
+  btnDone: document.getElementById('btn-done-settings-modal'),
   avatarCircle: document.getElementById('settings-avatar-circle'),
   btnChangeAvatar: document.getElementById('btn-change-avatar'),
   removePhotoBtnWrap: document.getElementById('settings-remove-photo-btn-wrap'),
@@ -8653,26 +8771,40 @@ if (myProfileBanner) {
   myProfileBanner.addEventListener('click', () => openSettingsModal('username'));
 }
 
-// Close button (Done) — auto-saves any un-submitted edits in all input fields
+// Close button (Back / Done) — auto-saves any un-submitted edits in background
+const handleDismissSettings = (e) => {
+  if (e && typeof e.preventDefault === 'function') {
+    try { e.preventDefault(); e.stopPropagation(); } catch (_) {}
+  }
+  if (state.currentUser) {
+    try { saveAllProfileSettingsAction().catch(() => {}); } catch (_) {}
+  }
+  closeModal(elSettings.modal);
+};
+
 if (elSettings.btnClose) {
-  elSettings.btnClose.addEventListener('click', async () => {
-    if (state.currentUser) {
-      await saveAllProfileSettingsAction();
-    }
-    closeModal(elSettings.modal);
-  });
+  elSettings.btnClose.addEventListener('click', handleDismissSettings);
+  elSettings.btnClose.addEventListener('touchend', handleDismissSettings);
 }
 
-// Close on backdrop tap — auto-saves edits
+if (elSettings.btnDone) {
+  elSettings.btnDone.addEventListener('click', handleDismissSettings);
+  elSettings.btnDone.addEventListener('touchend', handleDismissSettings);
+}
+
+// Close on backdrop tap or drag handle tap — auto-saves edits
 if (elSettings.modal) {
-  elSettings.modal.addEventListener('click', async (e) => {
+  elSettings.modal.addEventListener('click', (e) => {
     if (e.target === elSettings.modal) {
-      if (state.currentUser) {
-        await saveAllProfileSettingsAction();
-      }
-      closeModal(elSettings.modal);
+      handleDismissSettings(e);
     }
   });
+  const handleEl = elSettings.modal.querySelector('.ios-sheet-handle');
+  if (handleEl) {
+    handleEl.addEventListener('click', handleDismissSettings);
+    handleEl.addEventListener('touchend', handleDismissSettings);
+    handleEl.style.cursor = 'pointer';
+  }
 }
 
 // Open file picker for profile picture

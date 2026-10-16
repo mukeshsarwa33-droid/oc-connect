@@ -1273,24 +1273,56 @@ body {
 .btn-back-ios {
   background: none;
   border: none;
-  display: flex;
+  display: inline-flex;
   align-items: center;
-  gap: 2px;
-  color: var(--ios-blue);
+  gap: 4px;
+  color: var(--ios-blue, #007AFF);
   font-size: 16px;
   font-weight: 500;
   cursor: pointer;
-  padding: 4px;
+  padding: 8px 12px 8px 6px;
+  min-height: 44px;
+  min-width: 44px;
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+  user-select: none;
   transition: opacity 0.15s;
+  z-index: 10;
+  position: relative;
 }
 
 .btn-back-ios:active {
   opacity: 0.6;
 }
 
+.btn-back-ios svg,
 .btn-back-ios .back-text {
+  pointer-events: none;
+}
+
+.btn-done-ios {
+  background: none;
+  border: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--ios-blue, #007AFF);
   font-size: 16px;
-  letter-spacing: -0.2px;
+  font-weight: 600;
+  cursor: pointer;
+  padding: 8px 12px;
+  min-height: 44px;
+  min-width: 44px;
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+  user-select: none;
+  transition: opacity 0.15s;
+  z-index: 10;
+  position: relative;
+}
+
+.btn-done-ios:active {
+  opacity: 0.6;
 }
 
 .chat-header-center {
@@ -1661,12 +1693,21 @@ button, .btn-send-ios, .chat-item, .nav-btn, .avatar-circle, .list-item {
 
 /* iOS Sheet Handle / Grabber */
 .ios-sheet-handle {
-  width: 36px;
+  width: 40px;
   height: 5px;
   background: #C7C7CC;
   border-radius: 3px;
-  margin: 10px auto 4px auto;
+  margin: 10px auto 6px auto;
   flex-shrink: 0;
+  cursor: pointer;
+  touch-action: manipulation;
+  transition: background-color 0.15s, transform 0.15s;
+}
+
+.ios-sheet-handle:hover,
+.ios-sheet-handle:active {
+  background: #8E8E93;
+  transform: scaleY(1.3);
 }
 
 .modal-header {
